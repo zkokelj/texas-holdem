@@ -3,10 +3,6 @@ pragma solidity ^0.8.18;
 
 import "./interfaces.sol";
 
-/**
- * @title StateStorage
- * @dev Pure state storage contract that maintains game state
- */
 contract StateStorage {
     // State storage
     mapping(address => Player) private players;
@@ -139,6 +135,35 @@ contract StateStorage {
         return positionToPlayer[position];
     }
 
+    // New function to get tournament state values
+    function getTournamentStateValues() external view returns (
+        uint256 smallBlind, 
+        uint256 bigBlind,
+        uint256 blindTimer,
+        uint256 lastBlindUpdate,
+        uint8 tableState,
+        uint8 buttonPosition,
+        uint8 dealerPosition,
+        uint8 activePlayerCount,
+        uint256 startTime,
+        bool isPaused,
+        uint256 currentBlindLevel
+    ) {
+        return (
+            tournamentState.smallBlind,
+            tournamentState.bigBlind,
+            tournamentState.blindTimer,
+            tournamentState.lastBlindUpdate,
+            uint8(tournamentState.tableState),
+            tournamentState.buttonPosition,
+            tournamentState.dealerPosition,
+            tournamentState.activePlayerCount,
+            tournamentState.startTime,
+            tournamentState.isPaused,
+            tournamentState.currentBlindLevel
+        );
+    }
+
     function getTournamentState() external view returns (TournamentState memory) {
         return tournamentState;
     }
@@ -203,5 +228,27 @@ contract StateStorage {
             newLevel.smallBlind,
             newLevel.bigBlind
         );
+    }
+
+    function getTournamentStateArray() external view returns (
+        uint256[] memory values, 
+        uint8[] memory smallValues, 
+        bool isPaused
+    ) {
+        uint256[] memory vals = new uint256[](7);
+        vals[0] = tournamentState.smallBlind;
+        vals[1] = tournamentState.bigBlind;
+        vals[2] = tournamentState.blindTimer;
+        vals[3] = tournamentState.lastBlindUpdate;
+        vals[4] = tournamentState.startTime;
+        vals[5] = tournamentState.currentBlindLevel;
+        
+        uint8[] memory svals = new uint8[](4);
+        svals[0] = uint8(tournamentState.tableState);
+        svals[1] = tournamentState.buttonPosition;
+        svals[2] = tournamentState.dealerPosition;
+        svals[3] = tournamentState.activePlayerCount;
+        
+        return (vals, svals, tournamentState.isPaused);
     }
 }

@@ -6,6 +6,12 @@ interface IStateStorage {
     enum TableState { Waiting, Active, Complete }
     enum BettingRound { PreFlop, Flop, Turn, River }
     
+    struct BlindLevel {
+        uint256 smallBlind;
+        uint256 bigBlind;
+        uint256 startTime;
+    }
+    
     struct Player {
         uint256 stack;
         PlayerStatus status;
@@ -26,13 +32,15 @@ interface IStateStorage {
         uint8 activePlayerCount;
         uint256 startTime;
         bool isPaused;
+        uint256 currentBlindLevel;
+        BlindLevel[] blindHistory;
     }
     
     struct GameState {
         uint256 actionTimer;
         uint8[5] communityCards;
         BettingRound currentRound;
-        uint256 pot;
+        uint256 mainPot;
         uint256 currentBet;
         uint256 lastRaise;
         uint256 minRaise;
@@ -40,6 +48,11 @@ interface IStateStorage {
         address currentTurn;
         uint256 handStartTime;
         uint256 lastActionAmount;
+    }
+
+    struct SidePot {
+        uint256 amount;
+        bool isResolved;
     }
     
     // Core State Functions
@@ -73,6 +86,42 @@ interface IStateStorage {
     
     // Admin Functions
     function whitelistPlayer(address player) external;
+
+    //SidePot
+    function sidePotCount() external view returns (uint256);
+    function createSidePot(uint256 index, uint256 amount) external;
+    function setPotEligibility(uint256 potIndex, address player, bool eligible) external;
+
+    function getSidePot(uint256 index) external view returns (uint256 amount, bool isResolved);
+    function setSidePotResolved(uint256 index) external;
+
+    function isPlayerEligibleForPot(uint256 potIndex, address player) external view returns (bool);
+
+    //Blind management
+    function getCurrentBlindLevel() external view returns (BlindLevel memory);
+    function getBlindHistory() external view returns (BlindLevel[] memory);
+    function addBlindLevel(BlindLevel memory newLevel) external;
+
+    function getTournamentStateValues() external view returns (
+        uint256 smallBlind, 
+        uint256 bigBlind,
+        uint256 blindTimer,
+        uint256 lastBlindUpdate,
+        uint8 tableState,
+        uint8 buttonPosition,
+        uint8 dealerPosition,
+        uint8 activePlayerCount,
+        uint256 startTime,
+        bool isPaused,
+        uint256 currentBlindLevel
+    );
+
+    function getTournamentStateArray() external view returns (
+    uint256[] memory values, 
+    uint8[] memory smallValues, 
+    bool isPaused
+    );
+
 }
 
 interface IGameLogic {
@@ -80,6 +129,8 @@ interface IGameLogic {
     event RoundStarted(IStateStorage.BettingRound round);
     event PlayerTimedOut(address indexed player);
     event ActionTimerStarted(address indexed player, uint256 duration, uint256 blockNumber);
+    event RoundComplete(IStateStorage.BettingRound round);
+
 
     /// @notice Process player action
     /// @param player Player address

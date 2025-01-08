@@ -68,23 +68,19 @@ function startTournament(address[] calldata players)
     override 
     onlyValidPlayers(players) 
 {
-    // Skip state check for now
-    
-    // Initialize new tournament state
-    IStateStorage.TournamentState memory tournament;
-    tournament.smallBlind = INITIAL_SMALL_BLIND;
-    tournament.bigBlind = INITIAL_BIG_BLIND;
-    tournament.blindTimer = BLIND_LEVEL_DURATION;
-    tournament.lastBlindUpdate = block.timestamp;
-    tournament.tableState = IStateStorage.TableState.Active;
-    tournament.buttonPosition = 0;
-    tournament.dealerPosition = 0;
-    tournament.activePlayerCount = uint8(players.length);
-    tournament.startTime = block.timestamp;
-    tournament.isPaused = false;
-    
-    stateStorage.updateTournamentState(tournament);
-    
+    // Update blinds first
+    stateStorage.updateTournamentBlinds(INITIAL_SMALL_BLIND, INITIAL_BIG_BLIND);
+
+    // Update status
+    stateStorage.updateTournamentStatus(
+        IStateStorage.TableState.Active,
+        uint8(players.length),
+        false  // not paused
+    );
+
+    // Update positions
+    stateStorage.updateTournamentPositions(0, 0);
+
     // Initialize player states
     for(uint8 i = 0; i < players.length; i++) {
         IStateStorage.Player memory player;
@@ -408,5 +404,17 @@ function startTournament(address[] calldata players)
         return (sbPos, bbPos);
     }
 
+function testMinimalTournamentUpdate() external {
+    IStateStorage.TournamentState memory tournament;
+    tournament.smallBlind = 25;
+    tournament.bigBlind = 50;
+    // Not setting any other fields
+    
+    stateStorage.updateTournamentState(tournament);
+}
+
+function testSimpleBlindUpdate() external {
+    stateStorage.updateTournamentBlinds(25, 50);
+}
     
 }

@@ -182,9 +182,80 @@ contract StateStorage {
         }
     }
 
-    function updateTournamentState(TournamentState memory newState) external onlyAuthorized {
-        tournamentState = newState;
-    }
+function updateTournamentBlinds(uint256 small, uint256 big) external onlyAuthorized {
+    tournamentState.smallBlind = small;
+    tournamentState.bigBlind = big;
+}
+
+function getGameStateValues() external view returns (
+    uint256 actionTimer,
+    uint8[5] memory communityCards,
+    uint8 currentRound,
+    uint256 mainPot,
+    uint256 currentBet,
+    uint256 lastRaise,
+    uint256 minRaise,
+    uint8 lastAggressor,
+    address currentTurn,
+    uint256 handStartTime,
+    uint256 lastActionAmount
+) {
+    return (
+        gameState.actionTimer,
+        gameState.communityCards,
+        uint8(gameState.currentRound),
+        gameState.mainPot,
+        gameState.currentBet,
+        gameState.lastRaise,
+        gameState.minRaise,
+        gameState.lastAggressor,
+        gameState.currentTurn,
+        gameState.handStartTime,
+        gameState.lastActionAmount
+    );
+}
+
+function updateGameBasics(
+    uint8 currentRound,
+    uint256 mainPot,
+    uint256 currentBet,
+    address currentTurn
+) external onlyAuthorized {
+    gameState.currentRound = BettingRound(currentRound);
+    gameState.mainPot = mainPot;
+    gameState.currentBet = currentBet;
+    gameState.currentTurn = currentTurn;
+}
+
+function updateGameCards(uint8[5] calldata communityCards) external onlyAuthorized {
+    gameState.communityCards = communityCards;
+}
+
+function updateGameTimers(
+    uint256 actionTimer,
+    uint256 handStartTime
+) external onlyAuthorized {
+    gameState.actionTimer = actionTimer;
+    gameState.handStartTime = handStartTime;
+}
+
+function updateTournamentStatus(
+    TableState newState,
+    uint8 activeCount,
+    bool isPaused
+) external onlyAuthorized {
+    tournamentState.tableState = newState;
+    tournamentState.activePlayerCount = activeCount;
+    tournamentState.isPaused = isPaused;
+}
+
+function updateTournamentPositions(
+    uint8 button,
+    uint8 dealer
+) external onlyAuthorized {
+    tournamentState.buttonPosition = button;
+    tournamentState.dealerPosition = dealer;
+}
 
     function updateGameState(GameState memory newState) external onlyAuthorized {
         gameState = newState;

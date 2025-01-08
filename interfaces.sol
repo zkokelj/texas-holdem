@@ -116,12 +116,52 @@ interface IStateStorage {
         uint256 currentBlindLevel
     );
 
+    function getGameStateValues() external view returns (
+        uint256 actionTimer,
+        uint8[5] memory communityCards,
+        uint8 currentRound,
+        uint256 mainPot,
+        uint256 currentBet,
+        uint256 lastRaise,
+        uint256 minRaise,
+        uint8 lastAggressor,
+        address currentTurn,
+        uint256 handStartTime,
+        uint256 lastActionAmount
+    );
+
+    function updateGameBasics(
+        uint8 currentRound,
+        uint256 mainPot,
+        uint256 currentBet,
+        address currentTurn
+    ) external;
+
+    function updateGameCards(uint8[5] calldata communityCards) external;
+
+    function updateGameTimers(
+        uint256 actionTimer,
+        uint256 handStartTime
+    ) external;
+
     function getTournamentStateArray() external view returns (
     uint256[] memory values, 
     uint8[] memory smallValues, 
     bool isPaused
     );
 
+    function updateTournamentBlinds(uint256 small, uint256 big) external;
+
+    function updateTournamentStatus(
+        TableState newState,
+        uint8 activeCount,
+        bool isPaused
+    ) external;
+
+    function updateTournamentPositions(
+        uint8 button,
+        uint8 dealer
+    ) external;
 }
 
 interface IGameLogic {

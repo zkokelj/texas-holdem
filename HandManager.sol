@@ -45,77 +45,158 @@ contract HandManager {
      * @dev Start a new hand, dealing cards to all players
      * @return dealerSeed The seed used for shuffling
      */
-    function startNewHand() external onlyValidState returns (bytes32 dealerSeed) {
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        IStateStorage.TournamentState memory tournamentState = stateStorage.getTournamentState();
+function startNewHand() external onlyValidState returns (bytes32 dealerSeed) {
+    // Validate states and requirements
+    (uint256 smallBlind, uint256 bigBlind, uint8 buttonPos, uint8 activePlayerCount) = 
+        _validateAndGetInitialState();
+
+    // Handle blinds and positions
+    (address sbPlayer, address bbPlayer) = _handleBlinds(buttonPos, smallBlind, bigBlind);
+
+    // Deal cards and setup deck
+    dealerSeed = _dealCards(buttonPos, activePlayerCount, sbPlayer, bbPlayer, smallBlind, bigBlind);
+
+    // Set first player to act
+    address firstToAct = _getNextActivePlayer(bbPlayer);
+    stateStorage.updateGameBasics(
+        uint8(IStateStorage.BettingRound.PreFlop),
+        0, // mainPot
+        bigBlind, // currentBet
+        firstToAct // currentTurn
+    );
+    
+    return dealerSeed;
+}
+
+function _validateAndGetInitialState() private view returns (
+    uint256 smallBlind,
+    uint256 bigBlind,
+    uint8 buttonPos,
+    uint8 activePlayerCount
+) {
+    uint256 _smallBlind;
+    uint256 _bigBlind;
+    uint8 _tableState;
+    uint8 _buttonPos;
+    uint8 _activePlayerCount;
+    bool _isPaused;
+    
+    // Get tournament state values
+    (
+        _smallBlind,
+        _bigBlind,
+        ,  // blindTimer
+        ,  // lastBlindUpdate
+        _tableState,
+        _buttonPos,
+        ,  // dealerPos
+        _activePlayerCount,
+        ,  // startTime
+        _isPaused,
+        // currentBlindLevel
+    ) = stateStorage.getTournamentStateValues();
+    
+    require(_tableState == uint8(IStateStorage.TableState.Active), "Tournament not active");
+    require(!_isPaused, "Tournament is paused");
+    require(_activePlayerCount >= 2, "Not enough players");
+
+    return (_smallBlind, _bigBlind, _buttonPos, _activePlayerCount);
+}
+
+function _handleBlinds(uint8 buttonPos, uint256 smallBlind, uint256 bigBlind) 
+    private returns (address sbPlayer, address bbPlayer) 
+{
+    // Essential blind position verification and posting
+    uint8 sbPos = (buttonPos + 1) % PokerConstants.MAX_PLAYERS;
+    uint8 bbPos = (buttonPos + 2) % PokerConstants.MAX_PLAYERS;
+    
+    sbPlayer = stateStorage.getPlayerAtPosition(sbPos);
+    bbPlayer = stateStorage.getPlayerAtPosition(bbPos);
+    
+    IStateStorage.Player memory sbPlayerState = stateStorage.getPlayer(sbPlayer);
+    IStateStorage.Player memory bbPlayerState = stateStorage.getPlayer(bbPlayer);
+    
+    require(sbPlayerState.stack >= smallBlind, "SB cannot post");
+    require(bbPlayerState.stack >= bigBlind, "BB cannot post");
+    
+    sbPlayerState.stack -= smallBlind;
+    sbPlayerState.currentBet = smallBlind;
+    bbPlayerState.stack -= bigBlind;
+    bbPlayerState.currentBet = bigBlind;
+    
+    stateStorage.updatePlayerState(sbPlayer, sbPlayerState);
+    stateStorage.updatePlayerState(bbPlayer, bbPlayerState);
+
+    return (sbPlayer, bbPlayer);
+}
+
+function _dealCards(
+    uint8 buttonPos, 
+    uint8 activePlayerCount,
+    address sbPlayer,
+    address bbPlayer,
+    uint256 smallBlind,
+    uint256 bigBlind
+) private returns (bytes32) {
+    // Initialize game state for new hand
+    uint8[5] memory emptyCards = [0,0,0,0,0];
+    stateStorage.updateGameCards(emptyCards);
+    stateStorage.updateGameBasics(
+        uint8(IStateStorage.BettingRound.PreFlop),
+        0, // mainPot
+        bigBlind, // currentBet
+        address(0) // currentTurn will be set after dealing
+    );
+    stateStorage.updateGameTimers(30 seconds, block.timestamp);
+    
+    // Reset deck and get seed
+    deck = DeckManager.initializeDeck();
+    deck.shuffle();
+    bytes32 dealerSeed = deck.lastSeed;
+    
+    // Deal cards to players
+    uint8 currentPosition = buttonPos;
+    uint8 dealtCount = 0;
+    
+    while (dealtCount < activePlayerCount) {
+        currentPosition = (currentPosition + 1) % PokerConstants.MAX_PLAYERS;
+        address playerAddr = stateStorage.getPlayerAtPosition(currentPosition);
         
-        // Essential poker validation - can't start new hand while one is in progress
-        require(tournamentState.tableState == IStateStorage.TableState.Waiting || 
-                gameState.currentRound == IStateStorage.BettingRound.River,
-            "Hand in progress");
-        
-        // Essential poker rule - minimum 2 players needed for a hand
-        require(tournamentState.activePlayerCount >= 2, "Not enough players");
-        
-        // Essential poker state reset
-        gameState.currentRound = IStateStorage.BettingRound.PreFlop;
-        gameState.mainPot = 0;
-        gameState.currentBet = tournamentState.bigBlind;
-        
-        // Essential blind position verification and posting
-        uint8 sbPos = (tournamentState.buttonPosition + 1) % PokerConstants.MAX_PLAYERS;
-        uint8 bbPos = (tournamentState.buttonPosition + 2) % PokerConstants.MAX_PLAYERS;
-        
-        address sbPlayer = stateStorage.getPlayerAtPosition(sbPos);
-        address bbPlayer = stateStorage.getPlayerAtPosition(bbPos);
-        
-        // Essential poker rule - blinds must be postable
-        IStateStorage.Player memory sbPlayerState = stateStorage.getPlayer(sbPlayer);
-        IStateStorage.Player memory bbPlayerState = stateStorage.getPlayer(bbPlayer);
-        require(sbPlayerState.stack >= tournamentState.smallBlind, "SB cannot post");
-        require(bbPlayerState.stack >= tournamentState.bigBlind, "BB cannot post");
-        
-        // Post blinds - essential poker mechanic
-        sbPlayerState.stack -= tournamentState.smallBlind;
-        sbPlayerState.currentBet = tournamentState.smallBlind;
-        bbPlayerState.stack -= tournamentState.bigBlind;
-        bbPlayerState.currentBet = tournamentState.bigBlind;
-        
-        stateStorage.updatePlayerState(sbPlayer, sbPlayerState);
-        stateStorage.updatePlayerState(bbPlayer, bbPlayerState);
-        
-        // Reset deck and get seed - delegating details to DeckManager
-        deck = DeckManager.initializeDeck();
-        deck.shuffle();
-        dealerSeed = deck.lastSeed;
-        
-        // Essential poker mechanic - deal 2 cards to each active player starting from button
-        uint8 currentPosition = tournamentState.buttonPosition;
-        uint8 dealtCount = 0;
-        
-        while (dealtCount < tournamentState.activePlayerCount) {
-            currentPosition = (currentPosition + 1) % PokerConstants.MAX_PLAYERS;
-            address playerAddr = stateStorage.getPlayerAtPosition(currentPosition);
-            
-            if (playerAddr != address(0)) {
-                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
-                if (player.status == IStateStorage.PlayerStatus.Active && player.stack > 0) {
-                    // Reset previous hand state - essential for new hand
-                    player.currentBet = (playerAddr == sbPlayer) ? tournamentState.smallBlind :
-                                    (playerAddr == bbPlayer) ? tournamentState.bigBlind : 0;
-                    
-                    // Deal new hole cards - core poker mechanic
-                    player.holeCards = deck.dealHoleCards(currentPosition);
-                    stateStorage.updatePlayerState(playerAddr, player);
-                    emit HandDealt(playerAddr, currentPosition);
-                    dealtCount++;
-                }
+        if (playerAddr != address(0)) {
+            IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
+            if (player.status == IStateStorage.PlayerStatus.Active && player.stack > 0) {
+                player.currentBet = (playerAddr == sbPlayer) ? smallBlind :
+                                (playerAddr == bbPlayer) ? bigBlind : 0;
+                
+                player.holeCards = deck.dealHoleCards(currentPosition);
+                stateStorage.updatePlayerState(playerAddr, player);
+                emit HandDealt(playerAddr, currentPosition);
+                dealtCount++;
             }
         }
-        
-        stateStorage.updateGameState(gameState);
-        return dealerSeed;
     }
+
+    return dealerSeed;
+}
+
+function _getNextActivePlayer(address currentPlayer) private view returns (address) {
+    IStateStorage.Player memory player = stateStorage.getPlayer(currentPlayer);
+    uint8 currentPosition = player.position;
+    
+    for (uint8 i = 1; i <= PokerConstants.MAX_PLAYERS; i++) {
+        uint8 nextPosition = (currentPosition + i) % PokerConstants.MAX_PLAYERS;
+        address playerAtPosition = stateStorage.getPlayerAtPosition(nextPosition);
+        
+        if (playerAtPosition != address(0)) {
+            IStateStorage.Player memory nextPlayer = stateStorage.getPlayer(playerAtPosition);
+            if (nextPlayer.status == IStateStorage.PlayerStatus.Active && nextPlayer.stack > 0) {
+                return playerAtPosition;
+            }
+        }
+    }
+    
+    revert("No active players found");
+}
     
     /**
      * @dev Deal the flop (3 community cards)
@@ -170,4 +251,42 @@ contract HandManager {
             
         emit HandRevealed(player, playerState.holeCards);
     }
+
+    //Debug
+    // Test the first step
+function testValidateState() external view returns (
+    uint256 smallBlind,
+    uint256 bigBlind,
+    uint8 buttonPos,
+    uint8 activePlayerCount
+) {
+    return _validateAndGetInitialState();
+}
+
+// Test blind handling
+function testHandleBlinds(uint8 buttonPos, uint256 smallBlind, uint256 bigBlind) 
+    external returns (address sbPlayer, address bbPlayer) 
+{
+    return _handleBlinds(buttonPos, smallBlind, bigBlind);
+}
+
+// Test card dealing setup
+function testDealSetup() external {
+    uint8[5] memory emptyCards = [0,0,0,0,0];
+    stateStorage.updateGameCards(emptyCards);
+    stateStorage.updateGameBasics(
+        uint8(IStateStorage.BettingRound.PreFlop),
+        0, // mainPot
+        50, // currentBet (using default big blind)
+        address(0) // currentTurn
+    );
+    stateStorage.updateGameTimers(30 seconds, block.timestamp);
+}
+
+function testDeckSetup() external returns (bytes32) {
+    // Reset deck and get seed
+    deck = DeckManager.initializeDeck();
+    deck.shuffle();
+    return deck.lastSeed;
+}
 }

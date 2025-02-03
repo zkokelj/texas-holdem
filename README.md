@@ -1,13 +1,63 @@
-# Sample Hardhat Project
+# Texas Hold'em Smart Contract Deployment Guide
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+## Quick Setup
 
-Try running some of the following tasks:
+```bash
+npm install
+```
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
+## Compile Contracts
+
+```bash
+npx hardhat compile
+```
+
+## Deploy Contracts
+
+The deployment script handles the complex deployment order and contract authorization:
+
+1. Start a local node:
+```bash
 npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.ts
+```
+
+2. In a new terminal, deploy the contracts:
+```bash
+npx hardhat run scripts/deploy.ts --network localhost
+```
+
+The deployment process:
+- Deploys StateStorage (handles game state)
+- Deploys HandEvaluator (evaluates poker hands)  
+- Deploys HandManager (manages cards and dealing)
+- Deploys TournamentLogic (handles tournament flow)
+- Deploys GameLogic (core game mechanics)
+- Deploys Router (coordinates all contracts)
+- Authorizes all contracts in StateStorage
+- Outputs all contract addresses
+
+## Post-Deployment Steps
+
+Once contracts are deployed, you need to:
+
+1. Whitelist players through the Router contract:
+```typescript
+await router.whitelistPlayer(playerAddress);
+```
+
+2. Start a tournament:
+```typescript
+await tournamentLogic.startTournament(playerAddresses);
+```
+
+## Testing
+
+Run the full test suite:
+```bash
+npx hardhat test
+```
+
+Get test coverage:
+```bash
+npx hardhat coverage
 ```

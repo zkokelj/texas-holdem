@@ -237,29 +237,48 @@ function startTournament(address[] calldata players)
      * @notice Process player elimination
      * @param player Address of eliminated player
      */
-    function processElimination(address player) external override {
-        IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
-        IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
-        
-        require(tournament.tableState == IStateStorage.TableState.Active, 
-            "Tournament not active");
-        require(playerState.status == IStateStorage.PlayerStatus.Active, 
-            "Player not active");
-        require(playerState.stack == 0, "Player still has chips");
-        
-        playerState.status = IStateStorage.PlayerStatus.Eliminated;
-        stateStorage.updatePlayerState(player, playerState);
-        
-        tournament.activePlayerCount--;
-        stateStorage.updateTournamentState(tournament);
-        
-        emit PlayerEliminated(player);
-        
-        // Check if tournament is complete
-        if (tournament.activePlayerCount == 1) {
-            _completeTournament();
-        }
+   function processElimination(address player) external override {
+    IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
+    
+    // Get tournament state values
+    (
+        ,  // smallBlind
+        ,  // bigBlind
+        ,  // blindTimer
+        ,  // lastBlindUpdate
+        uint8 tableState,
+        ,  // buttonPosition
+        ,  // dealerPosition
+        uint8 activeCount,
+        ,  // startTime
+        bool isPaused,
+        // currentBlindLevel
+    ) = stateStorage.getTournamentStateValues();
+    
+    require(tableState == uint8(IStateStorage.TableState.Active), 
+        "Tournament not active");
+    require(playerState.status == IStateStorage.PlayerStatus.Active, 
+        "Player not active");
+    require(playerState.stack == 0, "Player still has chips");
+    
+    // Update player status to eliminated
+    playerState.status = IStateStorage.PlayerStatus.Eliminated;
+    stateStorage.updatePlayerState(player, playerState);
+    
+    // Update tournament state using the specific function
+    stateStorage.updateTournamentStatus(
+        IStateStorage.TableState.Active,
+        activeCount - 1,
+        isPaused
+    );
+    
+    emit PlayerEliminated(player);
+    
+    // Check if tournament is complete
+    if (activeCount == 2) { // If activeCount will become 1 after elimination
+        _completeTournament();
     }
+}
     
     /**
      * @notice Check current tournament status

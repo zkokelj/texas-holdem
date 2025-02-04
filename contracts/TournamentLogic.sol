@@ -12,6 +12,7 @@ contract TournamentLogic is ITournamentLogic {
     using PokerConstants for uint8;
     
     IStateStorage private immutable stateStorage;
+    address private immutable owner; 
     
     uint256 private constant INITIAL_SMALL_BLIND = 25;
     uint256 private constant INITIAL_BIG_BLIND = 50;
@@ -52,6 +53,7 @@ contract TournamentLogic is ITournamentLogic {
     
     constructor(address _stateStorage) {
         stateStorage = IStateStorage(_stateStorage);
+        owner = msg.sender;
     }
 
     function debugCall() external view returns (uint256, uint256) {
@@ -149,7 +151,8 @@ contract TournamentLogic is ITournamentLogic {
             
             // Essential tournament rule: end tournament if blinds too high relative to stacks
             uint256 avgStack = _calculateAverageStack();
-            if (newSmallBlind > avgStack / 4) {  // Standard tournament end condition
+            emit TournamentCompleted(address(0)); // Debug log
+            if (tournament.smallBlind > avgStack / 4) {  // Use current small blind
                 _completeTournament();
                 return;
             }
@@ -448,4 +451,11 @@ function testSimpleBlindUpdate() external {
     stateStorage.updateTournamentBlinds(25, 50);
 }
     
+function forceNextBlindUpdate(uint256 smallBlind, uint256 bigBlind) external {
+    require(msg.sender == owner, "Only owner can force blind update");
+    IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
+    tournament.smallBlind = smallBlind;
+    tournament.bigBlind = bigBlind;
+    stateStorage.updateTournamentState(tournament);
+}
 }

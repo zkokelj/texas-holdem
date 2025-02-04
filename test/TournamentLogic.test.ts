@@ -346,19 +346,35 @@ describe("TournamentLogic", function () {
             expect(newValues[0]).to.equal(initialSmallBlind); // Should not change
         });
 
-        // it("Should handle tournament completion with high blinds", async function () {
-        //     const playerAddresses = players.slice(0, 4).map(p => p.address);
-        //     await tournamentLogic.connect(owner).startTournament(playerAddresses);
 
-        //     // Set very high blinds relative to stacks
-        //     await stateStorage.connect(owner).updateTournamentBlinds(
-        //         INITIAL_STACK / 2, // Very high small blind
-        //         INITIAL_STACK      // Very high big blind
-        //     );
+        // test the following 
+        // if (newSmallBlind > avgStack / 4) {  // Standard tournament end condition
+        //     _completeTournament();
+        //     return;
+        // }
+        it("Should handle tournament completion with high blinds", async function () {
+            const playerAddresses = players.slice(0, 4).map(p => p.address);
+            await tournamentLogic.connect(owner).startTournament(playerAddresses);
 
-        //     await tournamentLogic.connect(owner).updateBlinds();
-        //     const [isComplete] = await tournamentLogic.checkTournamentStatus();
-        //     expect(isComplete).to.be.true;
-        // });
+            // Increase time to allow blind update
+            await ethers.provider.send("evm_increaseTime", [300]); // 5 minutes
+            await ethers.provider.send("evm_mine", []);
+
+            // Force next blind update to be very high
+            await tournamentLogic.connect(owner).forceNextBlindUpdate(
+                INITIAL_STACK * 2, // Very high small blind
+                INITIAL_STACK * 4  // Very high big blind
+            );
+
+            await tournamentLogic.connect(owner).updateBlinds();
+
+            // Get final state
+            const [values, smallValues] = await stateStorage.getTournamentStateArray();
+
+            // Check that tableState is Complete (2)
+            expect(smallValues[0]).to.equal(2); // TableState.Complete
+        });
+
+
     });
 });

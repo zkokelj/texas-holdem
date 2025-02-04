@@ -69,17 +69,17 @@ describe("HandEvaluator New Test Cases", function () {
         // Player 2: K♥(11), T♥(8)
         const hole2 = [11, 8] as [number, number];
 
-        console.log("Player 1 Hole:", hole1);
-        console.log("Player 2 Hole:", hole2);
-        console.log("Board:", board);
+        // console.log("Player 1 Hole:", hole1);
+        // console.log("Player 2 Hole:", hole2);
+        // console.log("Board:", board);
 
         const [rank1, type1] = await handEvaluator.evaluateHoldemHand(hole1, board);
         const [rank2, type2] = await handEvaluator.evaluateHoldemHand(hole2, board);
 
-        console.log("Player 1 Hand Rank:", rank1);
-        console.log("Player 1 Hand Type:", type1);
-        console.log("Player 2 Hand Rank:", rank2);
-        console.log("Player 2 Hand Type:", type2);
+        // console.log("Player 1 Hand Rank:", rank1);
+        // console.log("Player 1 Hand Type:", type1);
+        // console.log("Player 2 Hand Rank:", rank2);
+        // console.log("Player 2 Hand Type:", type2);
 
         const result = await handEvaluator.compareHoldemHands(hole1, hole2, board);
 
@@ -99,6 +99,46 @@ describe("HandEvaluator New Test Cases", function () {
         // '1' => High Card
         expect(handType).to.equal(1);
 
-        console.log("Hand Rank (High Card):", rank);
+        // console.log("Hand Rank (High Card):", rank);
+    });
+
+    it("Should revert if hole cards are duplicates", async function () {
+        // Both hole cards = index 3 => "Duplicate hole cards"
+        const hole = [3, 3] as [number, number];
+        const board = [0, 1, 2, 4, 5] as [number, number, number, number, number];
+
+        await expect(
+            handEvaluator.evaluateHoldemHand(hole, board)
+        ).to.be.revertedWith("Duplicate hole cards");
+    });
+
+    it("Should revert if a community card matches hole card", async function () {
+        const hole = [3, 16] as [number, number];
+        // Reuse 3 in the board => revert with "Community card matches hole card"
+        const board = [3, 1, 2, 4, 5] as [number, number, number, number, number];
+
+        await expect(
+            handEvaluator.evaluateHoldemHand(hole, board)
+        ).to.be.revertedWith("Community card matches hole card");
+    });
+
+    it("Should revert if community cards contain duplicates", async function () {
+        const hole = [0, 1] as [number, number];
+        // Duplicate board card => 2 repeated
+        const board = [2, 2, 3, 4, 5] as [number, number, number, number, number];
+
+        await expect(
+            handEvaluator.evaluateHoldemHand(hole, board)
+        ).to.be.revertedWith("Duplicate community cards");
+    });
+
+    it("Should revert if any card is out of range", async function () {
+        // Valid hole card is [0..51], but 99 is invalid
+        const hole = [0, 99] as [number, number];
+        const board = [1, 2, 3, 4, 5] as [number, number, number, number, number];
+
+        await expect(
+            handEvaluator.evaluateHoldemHand(hole, board)
+        ).to.be.revertedWith("Invalid hole cards");
     });
 });

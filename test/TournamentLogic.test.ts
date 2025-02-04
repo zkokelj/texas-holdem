@@ -12,6 +12,8 @@ describe("TournamentLogic", function () {
     const INITIAL_STACK = 10000;
     const INITIAL_SMALL_BLIND = 25;
     const INITIAL_BIG_BLIND = 50;
+    const MAX_PLAYERS = 5;
+    const MAX_SMALL_BLIND = 10000;
 
     beforeEach(async function () {
         [owner, ...players] = await ethers.getSigners();
@@ -84,24 +86,24 @@ describe("TournamentLogic", function () {
 
             // Verify initial state
             const [initialValues, initialSmallValues, initialIsPaused] = await stateStorage.getTournamentStateArray();
-            console.log("Initial tournament state:", {
-                smallBlind: initialValues[0],
-                bigBlind: initialValues[1],
-                blindTimer: initialValues[2],
-                lastBlindUpdate: initialValues[3],
-                startTime: initialValues[4],
-                currentBlindLevel: initialValues[5],
-                tableState: initialSmallValues[0],
-                buttonPosition: initialSmallValues[1],
-                dealerPosition: initialSmallValues[2],
-                activePlayerCount: initialSmallValues[3],
-                isPaused: initialIsPaused
-            });
+            // console.log("Initial tournament state:", {
+            //     smallBlind: initialValues[0],
+            //     bigBlind: initialValues[1],
+            //     blindTimer: initialValues[2],
+            //     lastBlindUpdate: initialValues[3],
+            //     startTime: initialValues[4],
+            //     currentBlindLevel: initialValues[5],
+            //     tableState: initialSmallValues[0],
+            //     buttonPosition: initialSmallValues[1],
+            //     dealerPosition: initialSmallValues[2],
+            //     activePlayerCount: initialSmallValues[3],
+            //     isPaused: initialIsPaused
+            // });
         });
 
         it("Should return correct tournament progress", async function () {
             // Get initial progress
-            console.log("Getting initial progress");
+            // console.log("Getting initial progress");
             const initialProgress = await tournamentLogic.getTournamentProgress();
             expect(initialProgress.elapsedTime).to.be.gte(0);
             expect(initialProgress.blindLevel).to.equal(1); // First level
@@ -230,5 +232,133 @@ describe("TournamentLogic", function () {
             expect(values[0]).to.equal(expectedSmallBlind);
             expect(values[1]).to.equal(expectedBigBlind);
         });
+    });
+
+    describe("Edge Cases and Security", function () {
+        it("Should handle tournament start with max players", async function () {
+            const maxPlayers = players.slice(0, MAX_PLAYERS);
+            await tournamentLogic.connect(owner).startTournament(maxPlayers.map(p => p.address));
+
+            const [values, smallValues] = await stateStorage.getTournamentStateArray();
+            expect(smallValues[3]).to.equal(MAX_PLAYERS); // activePlayerCount
+        });
+
+        it("Should prevent starting tournament twice", async function () {
+            const playerAddresses = players.slice(0, 4).map(p => p.address);
+            await tournamentLogic.connect(owner).startTournament(playerAddresses);
+
+            await expect(
+                tournamentLogic.connect(owner).startTournament(playerAddresses)
+            ).to.be.revertedWith("Tournament already active");
+        });
+
+        it("Should handle blind updates at maximum values", async function () {
+            const playerAddresses = players.slice(0, 4).map(p => p.address);
+            await tournamentLogic.connect(owner).startTournament(playerAddresses);
+
+            // Increase time significantly to force multiple blind levels
+            await ethers.provider.send("evm_increaseTime", [3600]); // 1 hour
+            await ethers.provider.send("evm_mine", []);
+
+            // Update blinds multiple times
+            for (let i = 0; i < 10; i++) {
+                await tournamentLogic.connect(owner).updateBlinds();
+                // Add a small time increase between updates to avoid timestamp issues
+                await ethers.provider.send("evm_increaseTime", [300]); // 5 minutes
+                await ethers.provider.send("evm_mine", []);
+            }
+
+            const [values] = await stateStorage.getTournamentStateArray();
+            expect(values[0]).to.be.lte(MAX_SMALL_BLIND); // Check small blind cap
+        });
+
+        it("Should handle player elimination order correctly", async function () {
+            const playerAddresses = players.slice(0, 4).map(p => p.address);
+            await tournamentLogic.connect(owner).startTournament(playerAddresses);
+
+            // Eliminate players in reverse order
+            for (let i = playerAddresses.length - 1; i > 0; i--) {
+                await stateStorage.connect(owner).updatePlayerState(
+                    playerAddresses[i],
+                    {
+                        stack: 0,
+                        status: 1, // Active
+                        currentBet: 0,
+                        position: i,
+                        holeCards: [0, 0],
+                        lastActionTime: 0
+                    }
+                );
+                await tournamentLogic.connect(owner).processElimination(playerAddresses[i]);
+            }
+
+            const [isComplete, winner] = await tournamentLogic.checkTournamentStatus();
+            expect(isComplete).to.be.true;
+            expect(winner).to.equal(playerAddresses[0]);
+        });
+
+        it("Should handle tournament pause/resume correctly", async function () {
+            const playerAddresses = players.slice(0, 4).map(p => p.address);
+            await tournamentLogic.connect(owner).startTournament(playerAddresses);
+
+            // Pause tournament
+            await stateStorage.connect(owner).updateTournamentStatus(
+                1, // Active
+                4, // activePlayerCount
+                true // isPaused
+            );
+
+            // Try to update blinds while paused
+            await expect(
+                tournamentLogic.connect(owner).updateBlinds()
+            ).to.be.revertedWith("Tournament paused");
+        });
+
+        it("Should handle blind level transitions correctly", async function () {
+            const playerAddresses = players.slice(0, 4).map(p => p.address);
+            await tournamentLogic.connect(owner).startTournament(playerAddresses);
+
+            // Get initial blind level
+            const initialLevel = await tournamentLogic.getCurrentBlindLevel();
+
+            // Increase time by exactly one blind level
+            await ethers.provider.send("evm_increaseTime", [300]); // 5 minutes
+            await ethers.provider.send("evm_mine", []);
+
+            await tournamentLogic.connect(owner).updateBlinds();
+            const newLevel = await tournamentLogic.getCurrentBlindLevel();
+            expect(newLevel).to.equal(Number(initialLevel) + 1);
+        });
+
+        it("Should prevent blind updates too frequently", async function () {
+            const playerAddresses = players.slice(0, 4).map(p => p.address);
+            await tournamentLogic.connect(owner).startTournament(playerAddresses);
+
+            // Update blinds
+            await tournamentLogic.connect(owner).updateBlinds();
+
+            // Try to update again immediately
+            const [values] = await stateStorage.getTournamentStateArray();
+            const initialSmallBlind = values[0];
+
+            await tournamentLogic.connect(owner).updateBlinds();
+            const [newValues] = await stateStorage.getTournamentStateArray();
+            expect(newValues[0]).to.equal(initialSmallBlind); // Should not change
+        });
+
+        // it("Should handle tournament completion with high blinds", async function () {
+        //     const playerAddresses = players.slice(0, 4).map(p => p.address);
+        //     await tournamentLogic.connect(owner).startTournament(playerAddresses);
+
+        //     // Set very high blinds relative to stacks
+        //     await stateStorage.connect(owner).updateTournamentBlinds(
+        //         INITIAL_STACK / 2, // Very high small blind
+        //         INITIAL_STACK      // Very high big blind
+        //     );
+
+        //     await tournamentLogic.connect(owner).updateBlinds();
+        //     const [isComplete] = await tournamentLogic.checkTournamentStatus();
+        //     expect(isComplete).to.be.true;
+        // });
     });
 });

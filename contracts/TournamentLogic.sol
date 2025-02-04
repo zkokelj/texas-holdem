@@ -22,7 +22,7 @@ contract TournamentLogic is ITournamentLogic {
     uint256 private constant MAX_SMALL_BLIND = 10000; // Safety cap
     uint256 private constant INITIAL_STACK = 10000;
     
-    modifier onlyValidPlayers(address[] calldata players) {
+    modifier onlyValidPlayers(address[] memory players) {
         require(players.length >= 2 && players.length <= PokerConstants.MAX_PLAYERS, 
             "Invalid player count");
         for(uint i = 0; i < players.length; i++) {
@@ -63,35 +63,39 @@ contract TournamentLogic is ITournamentLogic {
      * @notice Start a new tournament with given players
      * @param players Array of player addresses
      */
-function startTournament(address[] calldata players) 
-    external 
-    override 
-    onlyValidPlayers(players) 
-{
-    // Update blinds first
-    stateStorage.updateTournamentBlinds(INITIAL_SMALL_BLIND, INITIAL_BIG_BLIND);
+    function startTournament(address[] memory players) 
+        external 
+        override 
+        onlyValidPlayers(players) 
+    {
+        // Check if tournament is already active
+        IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
+        require(tournament.tableState != IStateStorage.TableState.Active, "Tournament already active");
 
-    // Update status
-    stateStorage.updateTournamentStatus(
-        IStateStorage.TableState.Active,
-        uint8(players.length),
-        false  // not paused
-    );
+        // Update blinds first
+        stateStorage.updateTournamentBlinds(INITIAL_SMALL_BLIND, INITIAL_BIG_BLIND);
 
-    // Update positions
-    stateStorage.updateTournamentPositions(0, 0);
+        // Update status
+        stateStorage.updateTournamentStatus(
+            IStateStorage.TableState.Active,
+            uint8(players.length),
+            false  // not paused
+        );
 
-    // Initialize player states
-    for(uint8 i = 0; i < players.length; i++) {
-        IStateStorage.Player memory player;
-        player.stack = INITIAL_STACK;
-        player.status = IStateStorage.PlayerStatus.Active;
-        player.position = i;
-        stateStorage.updatePlayerState(players[i], player);
+        // Update positions
+        stateStorage.updateTournamentPositions(0, 0);
+
+        // Initialize player states
+        for(uint8 i = 0; i < players.length; i++) {
+            IStateStorage.Player memory player;
+            player.stack = INITIAL_STACK;
+            player.status = IStateStorage.PlayerStatus.Active;
+            player.position = i;
+            stateStorage.updatePlayerState(players[i], player);
+        }
+        
+        emit TournamentStarted(block.timestamp);
     }
-    
-    emit TournamentStarted(block.timestamp);
-}
     
     /**
      * @notice Update blind levels based on time elapsed
@@ -133,6 +137,7 @@ function startTournament(address[] calldata players)
             tournament.smallBlind = newSmallBlind;
             tournament.bigBlind = newBigBlind;
             tournament.lastBlindUpdate = block.timestamp;
+            tournament.currentBlindLevel = expectedLevel;
             
             // Add new blind level to history
             IStateStorage.BlindLevel memory newLevel = IStateStorage.BlindLevel({
@@ -193,12 +198,9 @@ function startTournament(address[] calldata players)
         return (smallBlind, bigBlind);
     }
 
-        function getCurrentBlindLevel() public view returns (uint256) {
-            // TODO @ZIGA - should we requite it to be > 0?
-            if (blindLevels.length == 0) {
-                return 0;
-            }
-            return blindLevels.length - 1;
+    function getCurrentBlindLevel() public view returns (uint256) {
+        IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
+        return tournament.currentBlindLevel;
     }
     
     function getExpectedBlindLevel() public view returns (uint256) {

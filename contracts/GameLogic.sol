@@ -169,7 +169,7 @@ contract GameLogic is IGameLogic {
     }
 
     function _determineWinnerForPot(uint256 potIndex) private view returns (address[] memory) {
-        uint16 bestRank = type(uint16).max;
+        uint32 bestRank = type(uint32).max;
         uint8 winnerCount = 0;
         address[] memory potentialWinners = new address[](PokerConstants.MAX_PLAYERS);
         
@@ -179,7 +179,7 @@ contract GameLogic is IGameLogic {
             if (playerAddr != address(0) && stateStorage.isPlayerEligibleForPot(potIndex, playerAddr)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
-                    (uint16 rank, ) = handEvaluator.evaluateHoldemHand(
+                    (uint32 rank, ) = handEvaluator.evaluateHoldemHand(
                         player.holeCards,
                         stateStorage.getGameState().communityCards
                     );
@@ -495,11 +495,11 @@ contract GameLogic is IGameLogic {
         address bestPlayer = activePlayers[0];
         uint8[2] memory bestHoleCards = stateStorage.getPlayer(bestPlayer).holeCards;
         uint8[5] memory communityCards = stateStorage.getGameState().communityCards;
-        (uint16 bestRank, ) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
+        (uint32 bestRank, ) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
         
         for (uint i = 1; i < activePlayers.length; i++) {
             uint8[2] memory currentHoleCards = stateStorage.getPlayer(activePlayers[i]).holeCards;
-            (uint16 currentRank, ) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
+            (uint32 currentRank, ) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
             
             if (currentRank < bestRank) {
                 bestPlayer = activePlayers[i];

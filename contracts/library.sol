@@ -67,7 +67,8 @@ library DeckManager {
 
     function shuffle(Deck storage deck) internal {
         // Use TEN's block.difficulty as secure RNG source
-        bytes32 seed = bytes32(block.difficulty);
+        // TODO: ZIGA - double check if we should use block.prevrandao or block.difficulty in TEN and what is the difference.
+        bytes32 seed = bytes32(block.prevrandao);
         deck.lastSeed = seed;
         emit ShuffleInitiated(seed);
 

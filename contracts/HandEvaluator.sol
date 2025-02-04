@@ -82,7 +82,7 @@ contract HandEvaluator {
        uint8[2] memory holeCards,
        uint8[5] memory communityCards
    ) public view returns (
-       uint16 handRank,
+       uint32 handRank,
        uint8 handType
    ) {
        require(holeCards[0] < 52 && holeCards[1] < 52, "Invalid hole cards");
@@ -109,7 +109,7 @@ contract HandEvaluator {
    }
 
    function evaluateBestHand(uint8[7] memory cards) private view 
-       returns (uint16 handRank, uint8 handType) {
+       returns (uint32 handRank, uint8 handType) {
        uint16 rankBits = 0;
        uint8[4] memory suitCounts;
        uint8 maxSuitCount = 0;
@@ -142,16 +142,16 @@ contract HandEvaluator {
 
            for (uint8 i = 0; i < 10; i++) {
                if ((flushBits & STRAIGHTS[i]) == STRAIGHTS[i]) {
-                   return (i + 1, i == 0 ? 10 : 9);
+                   return (uint32(i + 1), i == 0 ? 10 : 9);
                }
            }
 
-           return (323 + findFlushRank(flushBits), 6);
+           return (uint32(323 + findFlushRank(flushBits)), 6);
        }
 
        for (uint8 i = 0; i < 10; i++) {
            if ((rankBits & STRAIGHTS[i]) == STRAIGHTS[i]) {
-               return (1600 + i, 5);
+               return (uint32(1600 + i), 5);
            }
        }
 
@@ -171,26 +171,26 @@ contract HandEvaluator {
        }
 
        if (maxCount == 4) {
-           return (11 + findFourOfAKindRank(rankCounts, rankProduct), 8);
+           return (uint32(11 + findFourOfAKindRank(rankCounts, rankProduct)), 8);
        }
        if (maxCount == 3 && pairs >= 2) {
-           return (167 + findFullHouseRank(rankCounts, rankProduct), 7);
+           return (uint32(167 + findFullHouseRank(rankCounts, rankProduct)), 7);
        }
        if (maxCount == 3) {
-           return (1610 + findThreeOfAKindRank(rankCounts, rankProduct), 4);
+           return (uint32(1610 + findThreeOfAKindRank(rankCounts, rankProduct)), 4);
        }
        if (pairs >= 2) {
-           return (2468 + findTwoPairRank(rankCounts, rankProduct), 3);
+           return (uint32(2468 + findTwoPairRank(rankCounts, rankProduct)), 3);
        }
        if (pairs == 1) {
-           return (3326 + findOnePairRank(rankCounts, rankProduct), 2);
+           return (uint32(3326 + findOnePairRank(rankCounts, rankProduct)), 2);
        }
        
-       return (6186 + findHighCardRank(rankBits), 1);
+       return (uint32(6186 + findHighCardRank(rankBits)), 1);
    }
 
-   function findFlushRank(uint16 bits) private pure returns (uint16) {
-       uint16 rank = 0;
+   function findFlushRank(uint16 bits) private pure returns (uint32) {
+       uint32 rank = 0;
        uint16 temp = bits;
        while (temp != 0) {
            rank = (rank << 1) | (temp & 1);
@@ -199,8 +199,8 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findFourOfAKindRank(uint8[13] memory counts, uint32 product) private pure returns (uint16) {
-       uint16 rank = 0;
+   function findFourOfAKindRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+       uint32 rank = 0;
        for (uint8 i = 0; i < 13; i++) {
            if (counts[i] == 4) {
                rank = i * 13;
@@ -214,7 +214,7 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findFullHouseRank(uint8[13] memory counts, uint32 product) private pure returns (uint16) {
+   function findFullHouseRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
        uint8 threeOfAKind = 0;
        uint8 pair = 0;
        
@@ -232,11 +232,11 @@ contract HandEvaluator {
            }
        }
        
-       return threeOfAKind * 13 + pair;
+       return uint32(threeOfAKind) * 13 + pair;
    }
 
-   function findThreeOfAKindRank(uint8[13] memory counts, uint32 product) private pure returns (uint16) {
-       uint16 rank = 0;
+   function findThreeOfAKindRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+       uint32 rank = 0;
        uint8 kickers = 0;
        uint8 threeOfAKind = 0;
        
@@ -246,20 +246,22 @@ contract HandEvaluator {
            }
        }
        
-       rank = threeOfAKind * 66;
-       
-       for (int8 i = 12; i >= 0; i--) {
-           if (counts[uint8(i)] == 1) {
-               rank += kickers * uint8(i);
-               kickers++;
-               if (kickers == 2) break;
+       unchecked {
+           rank = uint32(threeOfAKind) * 66;
+           
+           for (int8 i = 12; i >= 0; i--) {
+               if (counts[uint8(i)] == 1) {
+                   rank += uint32(kickers) * uint32(uint8(i));
+                   kickers++;
+                   if (kickers == 2) break;
+               }
            }
        }
        
        return rank;
    }
 
-   function findTwoPairRank(uint8[13] memory counts, uint32 product) private pure returns (uint16) {
+   function findTwoPairRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
        uint8[2] memory pairs;
        uint8 pairCount = 0;
        uint8 kicker = 0;
@@ -279,11 +281,13 @@ contract HandEvaluator {
            }
        }
        
-       return (pairs[0] * 13 + pairs[1]) * 13 + kicker;
+       unchecked {
+           return (uint32(pairs[0]) * 13 + pairs[1]) * 13 + kicker;
+       }
    }
 
-   function findOnePairRank(uint8[13] memory counts, uint32 product) private pure returns (uint16) {
-       uint16 rank = 0;
+   function findOnePairRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+       uint32 rank = 0;
        uint8 kickers = 0;
        uint8 pair = 0;
        
@@ -294,28 +298,32 @@ contract HandEvaluator {
            }
        }
        
-       rank = pair * 220;
-       
-       for (int8 i = 12; i >= 0; i--) {
-           if (counts[uint8(i)] == 1) {
-               rank += kickers * uint8(i);
-               kickers++;
-               if (kickers == 3) break;
+       unchecked {
+           rank = uint32(pair) * 220;
+           
+           for (int8 i = 12; i >= 0; i--) {
+               if (counts[uint8(i)] == 1) {
+                   rank += uint32(kickers) * uint32(uint8(i));
+                   kickers++;
+                   if (kickers == 3) break;
+               }
            }
        }
        
        return rank;
    }
 
-   function findHighCardRank(uint16 rankBits) private pure returns (uint16) {
-       uint16 rank = 0;
+   function findHighCardRank(uint16 rankBits) private pure returns (uint32) {
+       uint32 rank = 0;
        uint8 count = 0;
        
-       for (int8 i = 12; i >= 0; i--) {
-           if ((rankBits & (uint16(1) << uint8(i))) != 0) {
-               rank = rank * 13 + uint8(i);
-               count++;
-               if (count == 5) break;
+       unchecked {
+           for (int8 i = 12; i >= 0; i--) {
+               if ((rankBits & (uint16(1) << uint8(i))) != 0) {
+                   rank = rank * 13 + uint32(uint8(i));
+                   count++;
+                   if (count == 5) break;
+               }
            }
        }
        
@@ -327,8 +335,8 @@ contract HandEvaluator {
        uint8[2] memory holeCards2,
        uint8[5] memory communityCards
    ) public view returns (uint8) {
-       (uint16 rank1, ) = evaluateHoldemHand(holeCards1, communityCards);
-       (uint16 rank2, ) = evaluateHoldemHand(holeCards2, communityCards);
+       (uint32 rank1, ) = evaluateHoldemHand(holeCards1, communityCards);
+       (uint32 rank2, ) = evaluateHoldemHand(holeCards2, communityCards);
 
        return rank1 < rank2 ? 1 : rank2 < rank1 ? 2 : 0;
    }

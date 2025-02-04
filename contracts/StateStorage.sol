@@ -168,6 +168,10 @@ contract StateStorage {
         return tournamentState;
     }
 
+    function updateTournamentState(TournamentState memory newState) external onlyAuthorized {
+    tournamentState = newState;
+}
+
     function getGameState() external view returns (GameState memory) {
         return gameState;
     }
@@ -247,6 +251,9 @@ function updateTournamentStatus(
     tournamentState.tableState = newState;
     tournamentState.activePlayerCount = activeCount;
     tournamentState.isPaused = isPaused;
+    if (newState == TableState.Active && tournamentState.startTime == 0) {
+        tournamentState.startTime = block.timestamp;  // Set start time when activating tournament
+    }
 }
 
 function updateTournamentPositions(

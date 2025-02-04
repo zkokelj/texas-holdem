@@ -33,7 +33,7 @@ interface IStateStorage {
         uint256 startTime;
         bool isPaused;
         uint256 currentBlindLevel;
-        BlindLevel[] blindHistory;
+        //BlindLevel[] blindHistory;
     }
     
     struct GameState {
@@ -212,6 +212,12 @@ interface ITournamentLogic {
     /// @return isComplete Tournament ended
     /// @return winner Winner if complete
     function checkTournamentStatus() external view returns (bool isComplete, address winner);
+
+     function getTournamentProgress() external view returns (
+        uint256 elapsedTime,
+        uint256 blindLevel,
+        uint8 remainingPlayers
+    );
 }
 
 interface IRouter {

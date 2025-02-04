@@ -194,7 +194,11 @@ function startTournament(address[] calldata players)
     }
 
         function getCurrentBlindLevel() public view returns (uint256) {
-        return blindLevels.length - 1;
+            // TODO @ZIGA - should we requite it to be > 0?
+            if (blindLevels.length == 0) {
+                return 0;
+            }
+            return blindLevels.length - 1;
     }
     
     function getExpectedBlindLevel() public view returns (uint256) {
@@ -339,13 +343,19 @@ function startTournament(address[] calldata players)
         uint256 blindLevel,
         uint8 remainingPlayers
     ) {
+      
         IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
         
         if (tournament.tableState == IStateStorage.TableState.Active) {
             elapsedTime = block.timestamp - tournament.startTime;
             blindLevel = (elapsedTime / tournament.blindTimer) + 1;
             remainingPlayers = tournament.activePlayerCount;
+        }else{
+            elapsedTime = 0;
+            blindLevel = 0;
+            remainingPlayers = 0;
         }
+        return (elapsedTime, blindLevel, remainingPlayers);
     }
 
     function rotateButton() internal returns (uint8) {

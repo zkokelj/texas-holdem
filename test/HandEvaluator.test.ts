@@ -141,4 +141,97 @@ describe("HandEvaluator New Test Cases", function () {
             handEvaluator.evaluateHoldemHand(hole, board)
         ).to.be.revertedWith("Invalid hole cards");
     });
+
+    it("Should correctly evaluate a royal flush", async function () {
+        // Royal Flush in hearts: A♥, K♥, Q♥, J♥, T♥
+        // Hole cards: A♥ (card index 12) and K♥ (card index 11)
+        // Board cards: Q♥ (card index 10), J♥ (card index 9), T♥ (card index 8),
+        // plus two non-hearts cards (e.g., 9♦ (card index 20) and 6♣ (card index 30))
+        const hole = [12, 11] as [number, number];
+        const board = [10, 9, 8, 20, 30] as [number, number, number, number, number];
+        const [handRank, handType] = await handEvaluator.evaluateHoldemHand(hole, board);
+        // Expect handType to be 10 for a royal flush (straight flush with the highest possible straight)
+        expect(handType).to.equal(10);
+        console.log("Royal Flush Hand Rank:", handRank);
+    });
+
+    it("Should correctly evaluate a straight hand (non-flush)", async function () {
+        // Straight (non-flush) hand: 5-6-7-8-9
+        // Hole cards: 5♣ (card index 29) and 9♦ (card index 20)
+        // Board cards: 6♥ (card index 4), 7♠ (card index 44), 8♦ (card index 19),
+        // plus two extra cards that do not contribute to a flush: 4♣ (card index 28) and Q♣ (card index 36)
+        const hole = [29, 20] as [number, number];
+        const board = [4, 44, 19, 28, 36] as [number, number, number, number, number];
+        const [handRank, handType] = await handEvaluator.evaluateHoldemHand(hole, board);
+        // Expect handType to be 5 for a straight (non-flush)
+        expect(handType).to.equal(5);
+        console.log("Straight Hand Rank:", handRank);
+    });
+
+    it("Should correctly evaluate a three-of-a-kind hand", async function () {
+        // Three-of-a-kind hand: Triple 8's (8♥, 8♦, 8♣)
+        // Hole cards: 8♥ (card index 6) and 9♦ (card index 20)
+        // Board cards: 8♦ (card index 19) and 8♣ (card index 32) complete the triple,
+        // plus two unrelated cards: 2♥ (card index 0) and 3♥ (card index 1) and 4♣ (card index 28)
+        // (Only 5 board cards are needed; here we use 19, 32, 0, 28, 1)
+        const hole = [6, 20] as [number, number];
+        const board = [19, 32, 0, 28, 1] as [number, number, number, number, number];
+        const [handRank, handType] = await handEvaluator.evaluateHoldemHand(hole, board);
+        // Expect handType to be 4 for three-of-a-kind
+        expect(handType).to.equal(4);
+        console.log("Three-of-a-Kind Hand Rank:", handRank);
+    });
+
+    it("Should correctly evaluate a two pair hand", async function () {
+        // Two pair hand: Pair of 2's and pair of 3's
+        // Hole cards: 2♥ (card index 0) and 3♥ (card index 1)
+        // Board cards: 2♦ (card index 13) and 3♦ (card index 14) form the pairs,
+        // plus three unrelated cards: 10♥ (card index 8), 9♦ (card index 20), and K♥ (card index 11)
+        const hole = [0, 1] as [number, number];
+        const board = [13, 14, 8, 20, 11] as [number, number, number, number, number];
+        const [handRank, handType] = await handEvaluator.evaluateHoldemHand(hole, board);
+        // Expect handType to be 3 for two pair
+        expect(handType).to.equal(3);
+        console.log("Two Pair Hand Rank:", handRank);
+    });
+
+    it("Should correctly evaluate a one pair hand", async function () {
+        // One pair hand: Pair of 2's
+        // Hole cards: 2♥ (card index 0) and A♥ (card index 12)
+        // Board cards: 2♦ (card index 13) provides the pair,
+        // plus three unrelated cards: 9♥ (card index 7), Q♥ (card index 10), and J♦ (card index 22)
+        const hole = [0, 12] as [number, number];
+        const board = [13, 7, 10, 22, 28] as [number, number, number, number, number];
+        const [handRank, handType] = await handEvaluator.evaluateHoldemHand(hole, board);
+        // Expect handType to be 2 for one pair
+        expect(handType).to.equal(2);
+        console.log("One Pair Hand Rank:", handRank);
+    });
+
+    it("Should return 0 for tied hands", async function () {
+        // Tied hands: Both players share the same best hand from the board (royal flush)
+        // Board cards: T♥ (card index 8), J♥ (card index 9), Q♥ (card index 10), K♥ (card index 11), A♥ (card index 12)
+        // Player 1 hole: 2♥ (card index 0) and 4♥ (card index 2)
+        // Player 2 hole: 3♥ (card index 1) and 5♥ (card index 3)
+        const board = [8, 9, 10, 11, 12] as [number, number, number, number, number];
+        const hole1 = [0, 2] as [number, number];
+        const hole2 = [1, 3] as [number, number];
+        const result = await handEvaluator.compareHoldemHands(hole1, hole2, board);
+        // Expect a tie => result should be 0
+        expect(result).to.equal(0);
+    });
+
+    it("Should correctly determine winner when player2 wins", async function () {
+        // Compare two hands using a one-pair scenario with different kickers.
+        // Board: 6♥ (card index 4), 6♦ (card index 17), 2♣ (card index 26), 3♣ (card index 27), 4♣ (card index 28)
+        // If player1 has hole: K♥ (card index 11) and T♥ (card index 8)
+        // and player2 has hole: A♥ (card index 12) and 7♥ (card index 5),
+        // then player2's higher kicker should win.
+        const board = [4, 17, 26, 27, 28] as [number, number, number, number, number];
+        const hole1 = [11, 8] as [number, number];
+        const hole2 = [12, 5] as [number, number];
+        const result = await handEvaluator.compareHoldemHands(hole1, hole2, board);
+        // Expect player2 to win => result should be 2
+        expect(result).to.equal(2);
+    });
 });

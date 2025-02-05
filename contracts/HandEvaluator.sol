@@ -114,7 +114,8 @@ contract HandEvaluator {
        uint8[4] memory suitCounts;
        uint8 maxSuitCount = 0;
        uint8 maxSuit = 0;
-       uint32 rankProduct = 1;
+       // Changed rankProduct from uint32 to uint256 to avoid overflow.
+       uint256 rankProduct = 1;
 
        for (uint8 i = 0; i < 7; i++) {
            uint8 card = DECK[cards[i]];
@@ -199,7 +200,7 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findFourOfAKindRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+   function findFourOfAKindRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
        uint32 rank = 0;
        for (uint8 i = 0; i < 13; i++) {
            if (counts[i] == 4) {
@@ -214,7 +215,7 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findFullHouseRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+   function findFullHouseRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
        uint8 threeOfAKind = 0;
        uint8 pair = 0;
        
@@ -235,7 +236,7 @@ contract HandEvaluator {
        return uint32(threeOfAKind) * 13 + pair;
    }
 
-   function findThreeOfAKindRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+   function findThreeOfAKindRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
        uint32 rank = 0;
        uint8 kickers = 0;
        uint8 threeOfAKind = 0;
@@ -261,7 +262,7 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findTwoPairRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+   function findTwoPairRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
        uint8[2] memory pairs;
        uint8 pairCount = 0;
        uint8 kicker = 0;
@@ -286,7 +287,7 @@ contract HandEvaluator {
        }
    }
 
-   function findOnePairRank(uint8[13] memory counts, uint32 product) private pure returns (uint32) {
+   function findOnePairRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
        uint32 rank = 0;
        uint8 kickers = 0;
        uint8 pair = 0;

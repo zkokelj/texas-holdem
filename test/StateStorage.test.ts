@@ -245,10 +245,14 @@ describe("StateStorage", function () {
         });
 
         it("Should add new blind level correctly", async function () {
+            // Get the current block timestamp
+            const latestBlock = await ethers.provider.getBlock('latest');
+            const currentTimestamp = latestBlock!.timestamp;
+
             const newLevel = {
                 smallBlind: 50,
                 bigBlind: 100,
-                startTime: Math.floor(Date.now() / 1000) + 300 // 5 minutes in future
+                startTime: currentTimestamp + 300 // 5 minutes in future from current block
             };
 
             await expect(stateStorage.connect(authorized).addBlindLevel(newLevel))
@@ -261,10 +265,13 @@ describe("StateStorage", function () {
         });
 
         it("Should reject blind level with invalid start time", async function () {
+            const latestBlock = await ethers.provider.getBlock('latest');
+            const currentTimestamp = latestBlock!.timestamp;
+
             const pastLevel = {
                 smallBlind: 50,
                 bigBlind: 100,
-                startTime: Math.floor(Date.now() / 1000) - 300 // 5 minutes in past
+                startTime: currentTimestamp - 300 // 5 minutes in past from current block
             };
 
             await expect(stateStorage.connect(authorized).addBlindLevel(pastLevel))
@@ -272,10 +279,13 @@ describe("StateStorage", function () {
         });
 
         it("Should maintain blind level history", async function () {
+            const latestBlock = await ethers.provider.getBlock('latest');
+            const currentTimestamp = latestBlock!.timestamp;
+
             const newLevel = {
                 smallBlind: 50,
                 bigBlind: 100,
-                startTime: Math.floor(Date.now() / 1000) + 300
+                startTime: currentTimestamp + 300
             };
 
             await stateStorage.connect(authorized).addBlindLevel(newLevel);

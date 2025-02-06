@@ -261,17 +261,6 @@ describe("Integration Tests", function () {
                 });
             }
 
-            console.log("\nInitial player states:");
-            for (let i = 0; i < 5; i++) {
-                const player = await stateStorage.getPlayer(await players[i].getAddress());
-                console.log(`Player ${i}:`, {
-                    stack: player.stack.toString(),
-                    currentBet: player.currentBet.toString(),
-                    status: player.status.toString(),
-                    holeCards: player.holeCards
-                });
-            }
-
             // Set community cards and game state
             await stateStorage.updateGameCards([29, 42, 24, 37, 50]);
             await stateStorage.updateGameBasics(
@@ -285,13 +274,6 @@ describe("Integration Tests", function () {
             let nextPlayerAddress = (await stateStorage.getGameState()).currentTurn;
             const firstPlayerAddress = nextPlayerAddress;
             do {
-                const beforeState = await stateStorage.getGameState();
-                console.log("\nBefore action:", {
-                    currentTurn: nextPlayerAddress,
-                    mainPot: beforeState.mainPot.toString(),
-                    currentBet: beforeState.currentBet.toString()
-                });
-
                 // Find the player index for this address
                 for (let i = 0; i < players.length; i++) {
                     if (await players[i].getAddress() === nextPlayerAddress) {
@@ -303,43 +285,14 @@ describe("Integration Tests", function () {
                         break;
                     }
                 }
-
-                const afterState = await stateStorage.getGameState();
-                console.log("After action:", {
-                    mainPot: afterState.mainPot.toString(),
-                    currentBet: afterState.currentBet.toString()
-                });
-
                 // Get the next player's address
                 nextPlayerAddress = (await stateStorage.getGameState()).currentTurn;
             } while (nextPlayerAddress !== firstPlayerAddress && nextPlayerAddress !== ethers.ZeroAddress);
 
-            // After all players check, before final assertions
-            const gameLogicContract = await ethers.getContractAt("GameLogic", await gameLogic.getAddress());
-
-            // Log game state
+            // After all players check in River, showdown should happen automatically
             const finalGameState = await stateStorage.getGameState();
-            console.log("\nGame state after all checks:", {
-                currentRound: finalGameState.currentRound.toString(),
-                mainPot: finalGameState.mainPot.toString(),
-                currentBet: finalGameState.currentBet.toString(),
-                currentTurn: finalGameState.currentTurn
-            });
-
-            // Log all player states
-            console.log("\nFinal player states:");
-            for (let i = 0; i < 5; i++) {
-                const player = await stateStorage.getPlayer(await players[i].getAddress());
-                console.log(`Player ${i}:`, {
-                    address: await players[i].getAddress(),
-                    stack: player.stack.toString(),
-                    currentBet: player.currentBet.toString(),
-                    status: player.status.toString()
-                });
-            }
-
-            expect(finalGameState.mainPot).to.equal(0);
             const player0State = await stateStorage.getPlayer(await players[0].getAddress());
+            expect(finalGameState.mainPot).to.equal(0);
             expect(player0State.stack).to.be.gt(INITIAL_STACK);
         });
     });
@@ -354,28 +307,40 @@ describe("Integration Tests", function () {
             await tournamentLogic.startTournament(playerAddrs);
         });
 
-        // it("Should complete a mini tournament", async function () {
-        //     // Simulate a mini tournament by eliminating players.
-        //     // Mark players[1], [2], and [3] as eliminated.
-        //     for (let i = 1; i <= 3; i++) {
-        //         await stateStorage.updatePlayerState(await players[i].getAddress(), {
-        //             stack: 0,
-        //             status: 3, // Eliminated
-        //             currentBet: 0,
-        //             position: i,
-        //             holeCards: [0, 0],
-        //             lastActionTime: 0
-        //         });
-        //     }
-        //     // Update tournament state to reflect only 2 active players.
-        //     await stateStorage.updateTournamentStatus(1, 2, false);
-        //     // Process elimination on players[4] so that only one remains.
-        //     await tournamentLogic.processElimination(await players[4].getAddress());
+        it("Should complete a mini tournament", async function () {
+            // Simulate a mini tournament by eliminating players.
+            // Mark players[1], [2], and [3] as eliminated.
+            for (let i = 1; i <= 3; i++) {  // Only eliminate players 1-3
+                await stateStorage.updatePlayerState(await players[i].getAddress(), {
+                    stack: 0,
+                    status: 3, // Eliminated
+                    currentBet: 0,
+                    position: i,
+                    holeCards: [0, 0] as [number, number],
+                    lastActionTime: 0
+                });
+            }
 
-        //     const [isComplete, winner] = await tournamentLogic.checkTournamentStatus();
-        //     expect(isComplete).to.equal(true);
-        //     expect(winner).to.properAddress;
-        // });
+            // Set up player[4] with 0 chips but still active
+            await stateStorage.updatePlayerState(await players[4].getAddress(), {
+                stack: 0,
+                status: 1, // Still active
+                currentBet: 0,
+                position: 4,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0
+            });
+
+            // Update tournament state to reflect 2 active players
+            await stateStorage.updateTournamentStatus(1, 2, false);
+
+            // Now process elimination on player[4]
+            await tournamentLogic.processElimination(await players[4].getAddress());
+
+            const [isComplete, winner] = await tournamentLogic.checkTournamentStatus();
+            expect(isComplete).to.equal(true);
+            expect(winner).to.properAddress;
+        });
 
         it("Should handle blind progression during tournament", async function () {
             // Simulate time passage to trigger blind update.
@@ -389,23 +354,38 @@ describe("Integration Tests", function () {
             expect(tournament.bigBlind).to.be.gt(BIG_BLIND);
         });
 
-        // it("Should correctly determine tournament winner", async function () {
-        //     // Eliminate players[1] to players[4] so only player[0] remains.
-        //     for (let i = 1; i < 5; i++) {
-        //         await stateStorage.updatePlayerState(await players[i].getAddress(), {
-        //             stack: 0,
-        //             status: 3, // Eliminated
-        //             currentBet: 0,
-        //             position: i,
-        //             holeCards: [0, 0],
-        //             lastActionTime: 0
-        //         });
-        //     }
-        //     await stateStorage.updateTournamentStatus(1, 1, false);
-        //     const [isComplete, winner] = await tournamentLogic.checkTournamentStatus();
-        //     expect(isComplete).to.equal(true);
-        //     expect(winner).to.equal(await players[0].getAddress());
-        // });
+        it("Should correctly determine tournament winner", async function () {
+            // First set player[0] as our winner with chips
+            await stateStorage.updatePlayerState(await players[0].getAddress(), {
+                stack: INITIAL_STACK,  // Keep chips for the winner
+                status: 1, // Active
+                currentBet: 0,
+                position: 0,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0
+            });
+
+            // Eliminate players[1] to players[4]
+            for (let i = 1; i < 5; i++) {
+                // First set them to active with 0 chips
+                await stateStorage.updatePlayerState(await players[i].getAddress(), {
+                    stack: 0,
+                    status: 1, // Start as Active
+                    currentBet: 0,
+                    position: i,
+                    holeCards: [0, 0] as [number, number],
+                    lastActionTime: 0
+                });
+
+                // Then process their elimination
+                await tournamentLogic.processElimination(await players[i].getAddress());
+            }
+
+            // Now check tournament status
+            const [isComplete, winner] = await tournamentLogic.checkTournamentStatus();
+            expect(isComplete).to.equal(true);
+            expect(winner).to.equal(await players[0].getAddress());
+        });
     });
 
     describe("Additional Integration Test Cases", function () {

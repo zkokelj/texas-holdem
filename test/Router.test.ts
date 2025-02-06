@@ -66,9 +66,11 @@ describe("Router", function () {
         );
 
         // Authorize contracts in StateStorage
+        await stateStorage.connect(owner).authorizeContract(await owner.getAddress());
         await stateStorage.connect(owner).authorizeContract(await gameLogic.getAddress());
         await stateStorage.connect(owner).authorizeContract(await handManager.getAddress());
         await stateStorage.connect(owner).authorizeContract(await tournamentLogic.getAddress());
+        await stateStorage.connect(owner).authorizeContract(await router.getAddress());
 
         // For testing purposes, add alice to the whitelist.
         await router.connect(owner).whitelistPlayer(await alice.getAddress());
@@ -95,13 +97,40 @@ describe("Router", function () {
     });
 
     describe("Routing Game Actions", function () {
+        beforeEach(async function () {
+            // Set up tournament state before testing game actions
+            const tournamentSelector = tournamentLogic.interface.getFunction("startTournament").selector;
+            const playerAddresses = [
+                await alice.getAddress(),
+                await bob.getAddress(),
+                await admin.getAddress(),
+                await timerBackend.getAddress()
+            ];
+            const tournamentData = ethers.AbiCoder.defaultAbiCoder().encode(["address[]"], [playerAddresses]);
+            await router.connect(owner).routeTournamentAction(tournamentSelector, tournamentData);
+
+            // Set up game state
+            await stateStorage.connect(owner).updatePlayerState(await alice.getAddress(), {
+                stack: 1000,
+                status: 1, // Active
+                currentBet: 0,
+                position: 0,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0
+            });
+
+            // Set current turn to Alice
+            await stateStorage.connect(owner).updateGameBasics(
+                0, // PreFlop
+                0, // mainPot
+                0, // currentBet
+                await alice.getAddress() // currentTurn
+            );
+        });
+
         it("Should route a valid game action (FOLD) from a whitelisted player", async function () {
-            // alice is whitelisted.
-            // When she calls routeGameAction with action FOLD, Router calls GameLogic.processAction.
-            // For our test, we simply check that the call does not revert.
             const callData = "0x";
             await expect(router.connect(alice).routeGameAction(FOLD, callData)).to.not.be.reverted;
-            // (Optionally, you can check state changes in StateStorage if GameLogic.processAction updates player state.)
         });
 
         it("Should route a valid game action (RAISE) with correct data", async function () {
@@ -150,15 +179,42 @@ describe("Router", function () {
     });
 
     describe("Timer Backend Management and Blind Updates", function () {
+        beforeEach(async function () {
+            // Start tournament with multiple players
+            const tournamentSelector = tournamentLogic.interface.getFunction("startTournament").selector;
+            const playerAddresses = [
+                await alice.getAddress(),
+                await bob.getAddress(),
+                await admin.getAddress(),
+                await timerBackend.getAddress()
+            ];
+            const tournamentData = ethers.AbiCoder.defaultAbiCoder().encode(["address[]"], [playerAddresses]);
+            await router.connect(owner).routeTournamentAction(tournamentSelector, tournamentData);
+
+            // Set up game state for Alice
+            await stateStorage.connect(owner).updatePlayerState(await alice.getAddress(), {
+                stack: 1000,
+                status: 1, // Active
+                currentBet: 0,
+                position: 0,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0
+            });
+
+            // Set Alice as current turn
+            await stateStorage.connect(owner).updateGameBasics(
+                0, // PreFlop
+                0, // mainPot
+                0, // currentBet
+                await alice.getAddress() // currentTurn
+            );
+        });
+
         it("Should add and remove a timer backend and enforce only authorized timer can call routeBlindUpdate", async function () {
             // timerBackend was added in beforeEach.
             expect(await router.isAuthorizedTimer(await timerBackend.getAddress())).to.equal(true);
 
-            // Call routeBlindUpdate from timerBackend.
-            // For this test, we need stateStorage's tournament state to be active and not paused.
-            // We can simulate this by updating tournament state via StateStorage.
-            // (Assume that the deployed TournamentLogic and StateStorage are set to allow an update.)
-            // For our test we simply check that the call does not revert.
+            // Call routeBlindUpdate from timerBackend
             await expect(router.connect(timerBackend).routeBlindUpdate()).to.not.be.reverted;
 
             // Now remove the timer backend.

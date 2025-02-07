@@ -181,10 +181,11 @@ contract TournamentLogic is ITournamentLogic {
     }
 
     function calculateNextBlinds(uint256 targetLevel) private view returns (uint256, uint256) {
-        IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
+        // getTournamentStateValues returns 11 values:
+        // smallBlind, bigBlind, blindTimer, lastBlindUpdate, tableState, buttonPosition, 
+        // dealerPosition, activePlayerCount, startTime, isPaused, currentBlindLevel
+        (uint256 smallBlind, uint256 bigBlind,,,,,,,,,) = stateStorage.getTournamentStateValues();
         uint256 currentLevel = getCurrentBlindLevel();
-        uint256 smallBlind = tournament.smallBlind;
-        uint256 bigBlind = tournament.bigBlind;
         
         for (uint256 i = currentLevel + 1; i <= targetLevel; i++) {
             // First apply the regular increment
@@ -215,7 +216,6 @@ contract TournamentLogic is ITournamentLogic {
     }
     
     function shouldForceTournamentEnd(uint256 newSmallBlind) private view returns (bool) {
-        IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
         uint256 totalChips = 0;
         uint256 activePlayers = 0;
         

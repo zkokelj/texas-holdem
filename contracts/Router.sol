@@ -107,10 +107,6 @@ contract Router is IRouter {
             "Tournament not active");
         require(!tournament.isPaused, "Tournament paused");
         
-        // Get current blind level before update
-        IStateStorage.BlindLevel memory currentLevel = 
-            IStateStorage(stateStorage).getCurrentBlindLevel();
-            
         // Update blinds through tournament logic
         ITournamentLogic(tournamentLogic).updateBlinds();
         

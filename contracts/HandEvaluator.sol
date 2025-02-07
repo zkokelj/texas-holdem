@@ -172,19 +172,19 @@ contract HandEvaluator {
        }
 
        if (maxCount == 4) {
-           return (uint32(11 + findFourOfAKindRank(rankCounts, rankProduct)), 8);
+           return (uint32(11 + findFourOfAKindRank(rankCounts)), 8);
        }
        if (maxCount == 3 && pairs >= 2) {
-           return (uint32(167 + findFullHouseRank(rankCounts, rankProduct)), 7);
+           return (uint32(167 + findFullHouseRank(rankCounts)), 7);
        }
        if (maxCount == 3) {
-           return (uint32(1610 + findThreeOfAKindRank(rankCounts, rankProduct)), 4);
+           return (uint32(1610 + findThreeOfAKindRank(rankCounts)), 4);
        }
        if (pairs >= 2) {
-           return (uint32(2468 + findTwoPairRank(rankCounts, rankProduct)), 3);
+           return (uint32(2468 + findTwoPairRank(rankCounts)), 3);
        }
        if (pairs == 1) {
-           return (uint32(3326 + findOnePairRank(rankCounts, rankProduct)), 2);
+           return (uint32(3326 + findOnePairRank(rankCounts)), 2);
        }
        
        return (uint32(6186 + findHighCardRank(rankBits)), 1);
@@ -200,7 +200,7 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findFourOfAKindRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
+   function findFourOfAKindRank(uint8[13] memory counts) private pure returns (uint32) {
        uint32 rank = 0;
        for (uint8 i = 0; i < 13; i++) {
            if (counts[i] == 4) {
@@ -215,7 +215,7 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findFullHouseRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
+   function findFullHouseRank(uint8[13] memory counts) private pure returns (uint32) {
        uint8 threeOfAKind = 0;
        uint8 pair = 0;
        
@@ -236,7 +236,7 @@ contract HandEvaluator {
        return uint32(threeOfAKind) * 13 + pair;
    }
 
-   function findThreeOfAKindRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
+   function findThreeOfAKindRank(uint8[13] memory counts) private pure returns (uint32) {
        uint32 rank = 0;
        uint8 kickers = 0;
        uint8 threeOfAKind = 0;
@@ -262,7 +262,7 @@ contract HandEvaluator {
        return rank;
    }
 
-   function findTwoPairRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
+   function findTwoPairRank(uint8[13] memory counts) private pure returns (uint32) {
        uint8[2] memory pairs;
        uint8 pairCount = 0;
        uint8 kicker = 0;
@@ -287,7 +287,7 @@ contract HandEvaluator {
        }
    }
 
-   function findOnePairRank(uint8[13] memory counts, uint256 product) private pure returns (uint32) {
+   function findOnePairRank(uint8[13] memory counts) private pure returns (uint32) {
        uint32 rank = 0;
        uint8 kickers = 0;
        uint8 pair = 0;

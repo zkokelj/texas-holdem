@@ -138,54 +138,34 @@ describe("GameLogic - Player Order", function () {
 
         // Test complete pre-flop betting round with all players calling
         it("Should follow correct pre-flop order: UTG -> MP -> BTN -> SB -> BB", async function () {
-            // Log initial player positions
-            await verifyPlayerPositions();
-
             // Track and verify each player's turn in order
             let currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[UTG].address);
 
             // Test the sequence of actions
-            console.log("UTG player acts now with address:", players[UTG].address);
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
-            console.log("After UTG calls, next player:", currentTurn);
             expect(currentTurn).to.equal(players[MP].address);
-            console.log("WORKS after UTG")
 
-            console.log("MP player acts now with address:", players[MP].address);
             await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[BUTTON].address);
-            console.log("WORKS after MP")
 
-            console.log("BUTTON player acts now with address:", players[BUTTON].address);
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[SB].address);
-            console.log("WORKS after BUTTON")
 
-            console.log("SB player acts now with address:", players[SB].address);
             await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[BB].address);
-            console.log("WORKS after SB")
 
             await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
 
-            //TODO - Ziga - ADD those checks later:
-            /*                
-                // Verify pre-flop round completion
-                const finalGameState = await stateStorage.getGameState();
-                expect(finalGameState.currentRound).to.equal(1); // Check if moved to flop
-                expect(finalGameState.currentBet).to.equal(0); // Verify bets are reset
-                
-                // Verify all players have matched the bet
-                for (const player of players) {
-                    const playerState = await stateStorage.getPlayer(player.address);
-                    expect(playerState.currentBet).to.equal(0);
-                }
-            */
+            // Verify pre-flop round completion
+            const finalGameState = await stateStorage.getGameState();
+            expect(finalGameState.currentRound).to.equal(1); // Check if moved to flop
+            expect(finalGameState.currentBet).to.equal(0); // Verify bets are reset
+            expect(finalGameState.currentTurn).to.equal(players[SB].address); // Small Blind is next to act
         });
     });
 

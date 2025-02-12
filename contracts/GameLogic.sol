@@ -353,8 +353,19 @@ contract GameLogic is IGameLogic {
         IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
         IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
         
+        // Validate raise amount first
+        require(raiseAmount > 0, "Raise amount must be positive");
+        
         // Calculate total amount to put in (current bet - already put in + new raise)
-        uint256 toCall = gameState.currentBet - playerState.currentBet;
+        uint256 toCall;
+        if (gameState.currentBet > playerState.currentBet) {
+            toCall = gameState.currentBet - playerState.currentBet;
+        } else {
+            toCall = 0;
+        }
+        
+        // Check for overflow in totalAmount calculation
+        require(raiseAmount <= type(uint256).max - toCall, "Raise amount too large");
         uint256 totalAmount = toCall + raiseAmount;
         
         // Minimum raise is previous raise amount or BB if no previous raise
@@ -365,6 +376,8 @@ contract GameLogic is IGameLogic {
         if (totalAmount == playerState.stack) {
             _processAllIn(player, totalAmount);
         } else {
+            require(playerState.currentBet <= type(uint256).max - totalAmount, "Bet amount overflow");
+            
             playerState.stack -= totalAmount;
             playerState.currentBet += totalAmount;
             gameState.mainPot += totalAmount;

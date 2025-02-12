@@ -5,6 +5,7 @@ import "./library.sol";
 import "./interfaces.sol";
 import "./HandManager.sol";
 import "./HandEvaluator.sol";
+import "hardhat/console.sol";
 
 /**
  * @title GameLogic
@@ -76,8 +77,6 @@ contract GameLogic is IGameLogic {
         } else {
             revert("Invalid action");
         }
-        
-        _updateGameState();
     }
 
     function _processAllIn(address player, uint256 amount) private {
@@ -336,13 +335,21 @@ contract GameLogic is IGameLogic {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
         
+        console.log("_processCall - Player:", player);
+        console.log("_processCall - Current bet:", gameState.currentBet);
+        console.log("_processCall - Player current bet:", playerState.currentBet);
+        
         uint256 callAmount = gameState.currentBet - playerState.currentBet;
         require(playerState.stack >= callAmount, "Not enough chips");
         
         playerState.stack -= callAmount;
         playerState.currentBet = gameState.currentBet;
-        gameState.mainPot += callAmount;  // Changed pot to mainPot
+        gameState.mainPot += callAmount;
         gameState.lastActionAmount = callAmount;
+        
+        console.log("_processCall - Call amount:", callAmount);
+        console.log("_processCall - New player stack:", playerState.stack);
+        console.log("_processCall - New main pot:", gameState.mainPot);
         
         stateStorage.updatePlayerState(player, playerState);
         stateStorage.updateGameState(gameState);
@@ -384,27 +391,32 @@ contract GameLogic is IGameLogic {
     
     function _moveToNextPlayer() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
+    
+        
+        console.log("_moveToNextPlayer - Current turn:", gameState.currentTurn);
+        console.log("_moveToNextPlayer - Current round:", uint256(gameState.currentRound));
+        console.log("_moveToNextPlayer - Current bet:", gameState.currentBet);
         
         if (_isRoundComplete()) {
+            console.log("_moveToNextPlayer - Round is complete");
             if (_shouldShowdown()) {
+                console.log("_moveToNextPlayer - Initiating showdown");
                 _initiateShowdown();
             } else {
+                console.log("_moveToNextPlayer - Moving to next round");
                 _nextRound();
             }
         } else {
             address nextPlayer = _getNextActivePlayer(gameState.currentTurn);
+            console.log("_moveToNextPlayer - Next player determined:", nextPlayer);
             gameState.currentTurn = nextPlayer;
             stateStorage.updateGameState(gameState);
 
-            // Only emit timer event if game not paused
-            if (!tournament.isPaused) {
-                emit ActionTimerStarted(    
-                    nextPlayer,
-                    gameState.actionTimer,
-                    block.number
-                );
-            }
+            emit ActionTimerStarted(
+                nextPlayer,
+                gameState.actionTimer,
+                block.number
+            );
         }
     }
     
@@ -413,14 +425,24 @@ contract GameLogic is IGameLogic {
         uint8 currentPosition = currentPlayer == address(0) ? 
             tournament.buttonPosition : 
             stateStorage.getPlayer(currentPlayer).position;
+            
+        console.log("_getNextActivePlayer - Current player:", currentPlayer);
+        console.log("_getNextActivePlayer - Current position:", currentPosition);
         
         for (uint8 i = 1; i <= PokerConstants.MAX_PLAYERS; i++) {
             uint8 nextPosition = (currentPosition + i) % PokerConstants.MAX_PLAYERS;
             address playerAtPosition = stateStorage.getPlayerAtPosition(nextPosition);
             
+            console.log("_getNextActivePlayer - Checking position:", nextPosition);
+            console.log("_getNextActivePlayer - Player at position:", playerAtPosition);
+            
             if (playerAtPosition != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAtPosition);
+                console.log("_getNextActivePlayer - Player status:", uint256(player.status));
+                console.log("_getNextActivePlayer - Player stack:", player.stack);
+                
                 if (player.status == IStateStorage.PlayerStatus.Active && player.stack > 0) {
+                    console.log("_getNextActivePlayer - Found next player:", playerAtPosition);
                     return playerAtPosition;
                 }
             }
@@ -435,6 +457,21 @@ contract GameLogic is IGameLogic {
     
     function _isRoundComplete() private view returns (bool) {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        
+        // Special handling for pre-flop: BB must act
+        if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
+            address bbPlayer = stateStorage.getPlayerAtPosition(2); // BB is at position 2
+            if (bbPlayer != address(0)) {
+                IStateStorage.Player memory bbPlayerState = stateStorage.getPlayer(bbPlayer);
+                // If BB hasn't acted (their bet is still the forced BB amount) and they're not the current turn,
+                // the round is not complete
+                if (bbPlayerState.currentBet == gameState.currentBet && 
+                    bbPlayerState.status == IStateStorage.PlayerStatus.Active &&
+                    gameState.currentTurn != bbPlayer) {
+                    return false;
+                }
+            }
+        }
         
         uint8 activeCount = 0;
         uint8 matchedCount = 0;
@@ -451,6 +488,11 @@ contract GameLogic is IGameLogic {
                 }
             }
         }
+        
+        console.log("_isRoundComplete - Active count:", activeCount);
+        console.log("_isRoundComplete - Matched count:", matchedCount);
+        console.log("_isRoundComplete - Current round:", uint256(gameState.currentRound));
+        console.log("_isRoundComplete - Current bet:", gameState.currentBet);
         
         return activeCount == matchedCount;
     }

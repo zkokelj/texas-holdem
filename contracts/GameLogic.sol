@@ -427,7 +427,7 @@ contract GameLogic is IGameLogic {
             
             if (playerAtPosition != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAtPosition);
-                if (player.status == IStateStorage.PlayerStatus.Active && player.stack > 0) {
+                if (player.status == IStateStorage.PlayerStatus.Active) {
                     return playerAtPosition;
                 }
             }
@@ -448,8 +448,6 @@ contract GameLogic is IGameLogic {
             address bbPlayer = stateStorage.getPlayerAtPosition(2); // BB is at position 2
             if (bbPlayer != address(0)) {
                 IStateStorage.Player memory bbPlayerState = stateStorage.getPlayer(bbPlayer);
-                // If BB hasn't acted (their bet is still the forced BB amount) and they're not the current turn,
-                // the round is not complete
                 if (bbPlayerState.currentBet == gameState.currentBet && 
                     bbPlayerState.status == IStateStorage.PlayerStatus.Active &&
                     gameState.currentTurn != bbPlayer) {
@@ -465,7 +463,7 @@ contract GameLogic is IGameLogic {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
-                if (player.status == IStateStorage.PlayerStatus.Active && player.stack > 0) {
+                if (player.status == IStateStorage.PlayerStatus.Active) {
                     activeCount++;
                     if (player.currentBet == gameState.currentBet) {
                         matchedCount++;
@@ -493,7 +491,7 @@ contract GameLogic is IGameLogic {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
-                if (player.status == IStateStorage.PlayerStatus.Active && player.stack > 0) {
+                if (player.status == IStateStorage.PlayerStatus.Active) {
                     activePlayers[activeIndex] = playerAddress;
                     activeIndex++;
                     handManager.revealHand(playerAddress);
@@ -551,7 +549,7 @@ contract GameLogic is IGameLogic {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
-                if (player.status == IStateStorage.PlayerStatus.Active && player.stack > 0) {
+                if (player.status == IStateStorage.PlayerStatus.Active) {
                     lastPlayer = playerAddress;
                     activePlayers++;
                 }

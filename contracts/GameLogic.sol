@@ -257,43 +257,33 @@ contract GameLogic is IGameLogic {
 
     function _nextRound() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        console.log("_nextRound - Current round:", uint(gameState.currentRound));
         
         // Validate state before dealing cards
         require(gameState.currentRound < IStateStorage.BettingRound.River, "Hand complete");
         
         uint8[] memory newCards;
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
-            console.log("Transitioning from PreFlop to Flop");
             newCards = handManager.dealFlop();
             gameState.communityCards[0] = newCards[0];
             gameState.communityCards[1] = newCards[1];
             gameState.communityCards[2] = newCards[2];
             gameState.currentRound = IStateStorage.BettingRound.Flop;
-            console.log("Dealt flop cards");
         }
         else if (gameState.currentRound == IStateStorage.BettingRound.Flop) {
-            console.log("Transitioning from Flop to Turn");
             newCards = handManager.dealTurn();
             gameState.communityCards[3] = newCards[0];
             gameState.currentRound = IStateStorage.BettingRound.Turn;
-            console.log("Dealt turn card");
         }
         else if (gameState.currentRound == IStateStorage.BettingRound.Turn) {
-            console.log("Transitioning from Turn to River");
             newCards = handManager.dealRiver();
             gameState.communityCards[4] = newCards[0];
             gameState.currentRound = IStateStorage.BettingRound.River;
-            console.log("Dealt river card");
         }
         
         // Reset betting state for new round
         gameState.currentBet = 0;
         gameState.lastRaise = 0;
         gameState.currentTurn = _getNextActivePlayer(address(0));
-        
-        console.log("New round state - Round:", uint(gameState.currentRound));
-        console.log("First to act:", gameState.currentTurn);
         
         // Atomic state update
         stateStorage.updateGameState(gameState);
@@ -407,30 +397,21 @@ contract GameLogic is IGameLogic {
     
     function _moveToNextPlayer() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        console.log("_moveToNextPlayer - Current round:", uint(gameState.currentRound));
-        console.log("Current turn:", gameState.currentTurn);
         
         bool roundComplete = _isRoundComplete();
-        console.log("Is round complete?", roundComplete);
         
         if (roundComplete) {
-            console.log("Round is complete");
             bool shouldShowdown = _shouldShowdown();
-            console.log("Should showdown?", shouldShowdown);
             
             if (shouldShowdown) {
-                console.log("Initiating showdown");
                 _initiateShowdown();
             } else {
-                console.log("Moving to next round");
                 _nextRound();
             }
         } else {
-            console.log("Round is not complete, moving to next player");
             address nextPlayer = _getNextActivePlayer(gameState.currentTurn);
             gameState.currentTurn = nextPlayer;
             stateStorage.updateGameState(gameState);
-            console.log("Next player:", nextPlayer);
 
             emit ActionTimerStarted(
                 nextPlayer,
@@ -465,9 +446,8 @@ contract GameLogic is IGameLogic {
         return stateStorage.getTournamentState().activePlayerCount;
     }
     
-    function _isRoundComplete() private returns (bool) {
+    function _isRoundComplete() private view returns (bool) {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        console.log("_isRoundComplete - Current round:", uint(gameState.currentRound));
         
         // Special handling for pre-flop: BB must act
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
@@ -477,7 +457,6 @@ contract GameLogic is IGameLogic {
                 if (bbPlayerState.currentBet == gameState.currentBet && 
                     bbPlayerState.status == IStateStorage.PlayerStatus.Active &&
                     gameState.currentTurn != bbPlayer) {
-                    console.log("BB hasn't acted yet");
                     return false;
                 }
             }
@@ -499,26 +478,16 @@ contract GameLogic is IGameLogic {
             }
         }
         
-        bool isComplete = activeCount == matchedCount;
-        console.log("Active players:", activeCount);
-        console.log("Players with matched bets:", matchedCount);
-        console.log("Is round complete?", isComplete);
-        
-        return isComplete;
+        return activeCount == matchedCount;
     }
     
     function _shouldShowdown() private view returns (bool) {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        console.log("_shouldShowdown - Current round:", uint(gameState.currentRound));
-        console.log("Is River round?", gameState.currentRound == IStateStorage.BettingRound.River);
         return gameState.currentRound == IStateStorage.BettingRound.River;
     }
     
     function _initiateShowdown() private {
-        console.log("\n=== Initiating Showdown ===");
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        console.log("Current round:", uint(gameState.currentRound));
-        console.log("Main pot:", gameState.mainPot);
         
         // First count active players
         uint8 activeCount = 0;
@@ -532,20 +501,17 @@ contract GameLogic is IGameLogic {
             }
         }
 
-        console.log("Total active players:", activeCount);
         require(activeCount > 0, "No active players for showdown");
         
         // Create array of exact size needed
         address[] memory activePlayers = new address[](activeCount);
         uint8 activeIndex = 0;
         
-        console.log("Getting active players for showdown...");
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
-                    console.log("Active player found at position", i, ":", playerAddress);
                     activePlayers[activeIndex] = playerAddress;
                     activeIndex++;
                     handManager.revealHand(playerAddress);
@@ -553,14 +519,11 @@ contract GameLogic is IGameLogic {
             }
         }
         
-        console.log("Total active players in showdown:", activeIndex);
         require(activeIndex == activeCount, "Active player count mismatch");
         
         address winner = _determineWinner(activePlayers);
-        console.log("Determined winner:", winner);
         
         _awardPot(winner);
-        console.log("Pot awarded to winner");
         
         // Reset for next hand
         gameState.currentRound = IStateStorage.BettingRound.PreFlop;
@@ -568,41 +531,26 @@ contract GameLogic is IGameLogic {
         gameState.mainPot = 0;
         gameState.lastRaise = 0;
         stateStorage.updateGameState(gameState);
-        console.log("Game state reset for next hand");
-        console.log("=== Showdown Complete ===\n");
     }
     
     function _determineWinner(address[] memory activePlayers) private view returns (address) {
         require(activePlayers.length > 0, "No active players");
-        console.log("\n=== Determining Winner ===");
-        console.log("Number of active players:", activePlayers.length);
         
         address bestPlayer = activePlayers[0];
         uint8[2] memory bestHoleCards = stateStorage.getPlayer(bestPlayer).holeCards;
         uint8[5] memory communityCards = stateStorage.getGameState().communityCards;
-        (uint32 bestRank, uint8 bestHandType) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
-        
-        console.log("Initial best player:", bestPlayer);
-        console.log("Initial best rank:", bestRank);
-        console.log("Initial hand type:", bestHandType);
+        (uint32 bestRank,) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
         
         for (uint i = 1; i < activePlayers.length; i++) {
             uint8[2] memory currentHoleCards = stateStorage.getPlayer(activePlayers[i]).holeCards;
-            (uint32 currentRank, uint8 currentHandType) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
-            
-            console.log("Comparing player:", activePlayers[i]);
-            console.log("Current rank:", currentRank);
-            console.log("Current hand type:", currentHandType);
+            (uint32 currentRank,) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
             
             if (currentRank < bestRank) {
                 bestPlayer = activePlayers[i];
                 bestRank = currentRank;
-                console.log("New best player found:", bestPlayer);
             }
         }
         
-        console.log("Final winner:", bestPlayer);
-        console.log("=== Winner Determination Complete ===\n");
         return bestPlayer;
     }
     

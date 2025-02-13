@@ -5,6 +5,7 @@ import "./library.sol";
 import "./interfaces.sol";
 import "./HandManager.sol";
 import "./HandEvaluator.sol";
+import "hardhat/console.sol";
 
 /**
  * @title GameLogic
@@ -33,6 +34,7 @@ contract GameLogic is IGameLogic {
     event SidePotCreated(uint256 potIndex, uint256 amount);
     event PotAwarded(uint256 potIndex, address winner, uint256 amount);
     event PlayerAllIn(address indexed player, uint256 amount);
+    event LogDebug(string message);
 
     modifier synchronized() {
         require(!locked, "Reentrant call");
@@ -255,33 +257,43 @@ contract GameLogic is IGameLogic {
 
     function _nextRound() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        console.log("_nextRound - Current round:", uint(gameState.currentRound));
         
         // Validate state before dealing cards
         require(gameState.currentRound < IStateStorage.BettingRound.River, "Hand complete");
         
         uint8[] memory newCards;
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
+            console.log("Transitioning from PreFlop to Flop");
             newCards = handManager.dealFlop();
             gameState.communityCards[0] = newCards[0];
             gameState.communityCards[1] = newCards[1];
             gameState.communityCards[2] = newCards[2];
             gameState.currentRound = IStateStorage.BettingRound.Flop;
+            console.log("Dealt flop cards");
         }
         else if (gameState.currentRound == IStateStorage.BettingRound.Flop) {
+            console.log("Transitioning from Flop to Turn");
             newCards = handManager.dealTurn();
             gameState.communityCards[3] = newCards[0];
             gameState.currentRound = IStateStorage.BettingRound.Turn;
+            console.log("Dealt turn card");
         }
         else if (gameState.currentRound == IStateStorage.BettingRound.Turn) {
+            console.log("Transitioning from Turn to River");
             newCards = handManager.dealRiver();
             gameState.communityCards[4] = newCards[0];
             gameState.currentRound = IStateStorage.BettingRound.River;
+            console.log("Dealt river card");
         }
         
         // Reset betting state for new round
         gameState.currentBet = 0;
         gameState.lastRaise = 0;
         gameState.currentTurn = _getNextActivePlayer(address(0));
+        
+        console.log("New round state - Round:", uint(gameState.currentRound));
+        console.log("First to act:", gameState.currentTurn);
         
         // Atomic state update
         stateStorage.updateGameState(gameState);
@@ -395,17 +407,30 @@ contract GameLogic is IGameLogic {
     
     function _moveToNextPlayer() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        console.log("_moveToNextPlayer - Current round:", uint(gameState.currentRound));
+        console.log("Current turn:", gameState.currentTurn);
         
-        if (_isRoundComplete()) {
-            if (_shouldShowdown()) {
+        bool roundComplete = _isRoundComplete();
+        console.log("Is round complete?", roundComplete);
+        
+        if (roundComplete) {
+            console.log("Round is complete");
+            bool shouldShowdown = _shouldShowdown();
+            console.log("Should showdown?", shouldShowdown);
+            
+            if (shouldShowdown) {
+                console.log("Initiating showdown");
                 _initiateShowdown();
             } else {
+                console.log("Moving to next round");
                 _nextRound();
             }
         } else {
+            console.log("Round is not complete, moving to next player");
             address nextPlayer = _getNextActivePlayer(gameState.currentTurn);
             gameState.currentTurn = nextPlayer;
             stateStorage.updateGameState(gameState);
+            console.log("Next player:", nextPlayer);
 
             emit ActionTimerStarted(
                 nextPlayer,
@@ -440,8 +465,9 @@ contract GameLogic is IGameLogic {
         return stateStorage.getTournamentState().activePlayerCount;
     }
     
-    function _isRoundComplete() private view returns (bool) {
+    function _isRoundComplete() private returns (bool) {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        console.log("_isRoundComplete - Current round:", uint(gameState.currentRound));
         
         // Special handling for pre-flop: BB must act
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
@@ -451,6 +477,7 @@ contract GameLogic is IGameLogic {
                 if (bbPlayerState.currentBet == gameState.currentBet && 
                     bbPlayerState.status == IStateStorage.PlayerStatus.Active &&
                     gameState.currentTurn != bbPlayer) {
+                    console.log("BB hasn't acted yet");
                     return false;
                 }
             }
@@ -472,7 +499,12 @@ contract GameLogic is IGameLogic {
             }
         }
         
-        return activeCount == matchedCount;
+        bool isComplete = activeCount == matchedCount;
+        console.log("Active players:", activeCount);
+        console.log("Players with matched bets:", matchedCount);
+        console.log("Is round complete?", isComplete);
+        
+        return isComplete;
     }
     
     function _shouldShowdown() private view returns (bool) {
@@ -580,5 +612,28 @@ contract GameLogic is IGameLogic {
                 block.number
             );
         }
+    }
+
+    // Helper function to convert uint to string for logging
+    function uint2str(uint _i) internal pure returns (string memory _uintAsString) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint j = _i;
+        uint len;
+        while (j != 0) {
+            len++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(len);
+        uint k = len;
+        while (_i != 0) {
+            k = k-1;
+            uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+            bytes1 b1 = bytes1(temp);
+            bstr[k] = b1;
+            _i /= 10;
+        }
+        return string(bstr);
     }
 }

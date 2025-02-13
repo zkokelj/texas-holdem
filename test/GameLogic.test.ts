@@ -90,13 +90,28 @@ describe("GameLogic - Player Order", function () {
                 stack = INITIAL_STACK - BIG_BLIND;
             }
 
+            // Assign hole cards to each player
+            let holeCards;
+            if (i === BUTTON) {
+                // Give BUTTON a pair of Aces
+                holeCards = [51, 47]; // Ace of Spades, Ace of Hearts
+            } else if (i === UTG) {
+                // Give UTG lower cards
+                holeCards = [40, 41]; // Lower cards that won't make a better hand
+            } else {
+                // Other players get sequential lower cards starting from 42
+                const holeCard1 = 42 + (i * 2);     // First card: 42,44,46
+                const holeCard2 = 43 + (i * 2);     // Second card: 43,45,47
+                holeCards = [holeCard1, holeCard2];
+            }
+
             // Update state for each player with their position and stack
             await stateStorage.connect(owner).updatePlayerState(players[i].address, {
                 stack: stack,
                 status: 1,         // 1 = Active player
                 currentBet: currentBet,
                 position: i,
-                holeCards: [0, 0], // No cards dealt yet
+                holeCards: holeCards,
                 lastActionTime: 0
             });
         }
@@ -344,172 +359,157 @@ describe("GameLogic - Player Order", function () {
 
             console.log("\nTurn round started!");
 
-            // Test complete game flow with all players calling each round
-            // it("Should complete all betting rounds with correct order: pre-flop -> flop -> turn -> river", async function () {
-            //     // Pre-flop round
-            //     let currentTurn = (await stateStorage.getGameState()).currentTurn;
-            //     console.log("\nStarting pre-flop round");
-            //     console.log("Initial turn:", currentTurn);
-            //     expect(currentTurn).to.equal(players[UTG].address);
+            // Turn round - UTG and BUTTON remain in hand, others fold
+            // SB folds
+            console.log("\nSB folding in turn");
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            console.log("After SB fold, turn:", currentTurn);
+            expect(currentTurn).to.equal(players[BB].address);
 
-            //     // All players call pre-flop
-            //     for (let pos of [UTG, MP, BUTTON]) {
-            //         console.log(`\nPlayer at position ${pos} calling`);
-            //         await gameLogic.connect(players[pos]).processAction(players[pos].address, CALL, 0);
-            //         currentTurn = (await stateStorage.getGameState()).currentTurn;
-            //         console.log("Next turn:", currentTurn);
-            //         expect(currentTurn).to.equal(players[(pos + 1) % 5].address);
-            //     }
+            // BB folds
+            console.log("\nBB folding");
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            console.log("After BB fold, turn:", currentTurn);
+            expect(currentTurn).to.equal(players[UTG].address);
 
-            //     // SB completes the call
-            //     console.log("\nSB calling");
-            //     await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
-            //     currentTurn = (await stateStorage.getGameState()).currentTurn;
-            //     console.log("After SB call, turn:", currentTurn);
-            //     expect(currentTurn).to.equal(players[BB].address);
+            // UTG bets
+            console.log("\nUTG betting in turn");
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 200);
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            console.log("After UTG bet, turn:", currentTurn);
+            expect(currentTurn).to.equal(players[MP].address);
 
-            //     // BB checks to end pre-flop
-            //     console.log("\nBB checking");
-            //     await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            // MP folds
+            console.log("\nMP folding");
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            console.log("After MP fold, turn:", currentTurn);
+            expect(currentTurn).to.equal(players[BUTTON].address);
 
-            //     // Verify flop round started
-            //     let gameState = await stateStorage.getGameState();
-            //     console.log("\nAfter BB check, game state:", {
-            //         currentRound: gameState.currentRound,
-            //         currentTurn: gameState.currentTurn,
-            //         currentBet: gameState.currentBet,
-            //         mainPot: gameState.mainPot
-            //     });
+            // BUTTON calls
+            console.log("\nBUTTON calling");
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
 
-            //     expect(gameState.currentRound).to.equal(1); // Flop round
-            //     expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts post-flop
-            //     expect(gameState.currentBet).to.equal(0); // Bets reset
+            // Verify river round started
+            gameState = await stateStorage.getGameState();
+            console.log("\nAfter BUTTON call, game state:", {
+                currentRound: gameState.currentRound,
+                currentTurn: gameState.currentTurn,
+                currentBet: gameState.currentBet,
+                mainPot: gameState.mainPot,
+                communityCards: gameState.communityCards
+            });
 
-            //     console.log("\nFlop round started!");
+            expect(gameState.currentRound).to.equal(3); // River round
+            expect(gameState.currentTurn).to.equal(players[UTG].address); // UTG starts as SB and BB folded
 
-            //     // Flop round - everyone checks
-            //     for (let pos of [SB, BB, UTG, MP]) {
-            //         console.log(`\nPlayer at position ${pos} checking`);
-            //         await gameLogic.connect(players[pos]).processAction(players[pos].address, CHECK, 0);
-            //         currentTurn = (await stateStorage.getGameState()).currentTurn;
-            //         console.log("After check, turn:", currentTurn);
-            //         expect(currentTurn).to.equal(players[(pos + 1) % 5].address);
-            //     }
+            console.log("\nRiver round started!");
 
-            //     // BUTTON checks to end flop
-            //     console.log("\nBUTTON checking to end flop");
-            //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CHECK, 0);
+            // River round - UTG and BUTTON showdown
+            // UTG bets
+            console.log("\nUTG betting in river");
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 300);
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            console.log("After UTG bet, turn:", currentTurn);
+            expect(currentTurn).to.equal(players[BUTTON].address);
 
-            //     // Verify turn round started
-            //     gameState = await stateStorage.getGameState();
-            //     console.log("\nAfter BUTTON check, game state:", {
-            //         currentRound: gameState.currentRound,
-            //         currentTurn: gameState.currentTurn,
-            //         currentBet: gameState.currentBet,
-            //         mainPot: gameState.mainPot,
-            //         communityCards: gameState.communityCards
-            //     });
+            // BUTTON raises
+            console.log("\nBUTTON raising");
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 900);
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            console.log("After BUTTON raise, turn:", currentTurn);
+            expect(currentTurn).to.equal(players[UTG].address);
 
-            //     expect(gameState.currentRound).to.equal(2); // Turn round
-            //     expect(gameState.currentTurn).to.equal(players[SB].address);
-            // });
+            // UTG calls
+            console.log("\nUTG calling to end river");
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
 
-            // Test complete game flow with raises in each round
-            // it("Should handle raises correctly across all betting rounds", async function () {
-            //     // Pre-flop round with raises
-            //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 150); // Raise to 150
-            //     await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
-            //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 450); // Re-raise to 450
-            //     await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
-            //     await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
-            //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
-            //     await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            // Verify showdown
+            gameState = await stateStorage.getGameState();
+            console.log("\n=== Final Game State ===");
+            console.log("Current round:", gameState.currentRound);
+            console.log("Current turn:", gameState.currentTurn);
+            console.log("Current bet:", gameState.currentBet);
+            console.log("Main pot:", gameState.mainPot);
+            console.log("Community cards:", gameState.communityCards);
 
-            //     // Verify flop round started correctly
-            //     let gameState = await stateStorage.getGameState();
-            //     expect(gameState.currentRound).to.equal(1);
-            //     expect(gameState.currentTurn).to.equal(players[SB].address);
-            //     expect(gameState.currentBet).to.equal(0);
+            // Log player states
+            console.log("\n=== Player States ===");
+            for (let i = 0; i < 5; i++) {
+                const addr = await stateStorage.getPlayerAtPosition(i);
+                if (addr !== ethers.ZeroAddress) {
+                    const player = await stateStorage.getPlayer(addr);
+                    console.log(`Position ${i}:`, {
+                        address: addr,
+                        status: player.status,
+                        stack: player.stack,
+                        currentBet: player.currentBet,
+                        holeCards: player.holeCards
+                    });
+                }
+            }
 
-            //     // Flop round with raises
-            //     await gameLogic.connect(players[SB]).processAction(players[SB].address, CHECK, 0);
-            //     await gameLogic.connect(players[BB]).processAction(players[BB].address, RAISE, 200);
-            //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
-            //     await gameLogic.connect(players[MP]).processAction(players[MP].address, RAISE, 600);
-            //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
-            //     await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
-            //     await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
-            //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // After showdown, game resets to PreFlop (0) for the next hand
+            expect(gameState.currentRound).to.equal(0); // Game resets to PreFlop after showdown
 
-            //     // Verify turn round started
-            //     gameState = await stateStorage.getGameState();
-            //     expect(gameState.currentRound).to.equal(2);
-            //     expect(gameState.currentTurn).to.equal(players[SB].address);
+            // Get the hole cards and community cards
+            const utgHoleCards = await stateStorage.getPlayer(players[UTG].address).then((p: { holeCards: number[] }) => p.holeCards);
+            const buttonHoleCards = await stateStorage.getPlayer(players[BUTTON].address).then((p: { holeCards: number[] }) => p.holeCards);
+            const communityCards = gameState.communityCards;
 
-            //     // Turn round with a raise
-            //     await gameLogic.connect(players[SB]).processAction(players[SB].address, CHECK, 0);
-            //     await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
-            //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 800);
-            //     await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
-            //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
-            //     await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
-            //     await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+            console.log("\n=== Showdown Information ===");
+            console.log("UTG hole cards:", utgHoleCards);
+            console.log("BUTTON hole cards:", buttonHoleCards);
+            console.log("Community cards:", communityCards);
 
-            //     // Verify river round started
-            //     gameState = await stateStorage.getGameState();
-            //     expect(gameState.currentRound).to.equal(3);
-            //     expect(gameState.currentTurn).to.equal(players[BB].address); // SB folded, so BB starts
+            // Convert BigInt arrays to regular number arrays
+            const utgHoleCardsNum = utgHoleCards.map((card: bigint): number => Number(card));
+            const buttonHoleCardsNum = buttonHoleCards.map((card: bigint): number => Number(card));
+            const communityCardsNum = communityCards.map((card: bigint): number => Number(card));
 
-            //     // River round - check through
-            //     for (let pos of [BB, UTG, MP, BUTTON]) {
-            //         await gameLogic.connect(players[pos]).processAction(players[pos].address, CHECK, 0);
-            //     }
+            // Compare hands to determine winner
+            const winner = await handEvaluator.compareHoldemHands(
+                utgHoleCardsNum,
+                buttonHoleCardsNum,
+                communityCardsNum
+            );
 
-            //     // Verify hand is complete
-            //     gameState = await stateStorage.getGameState();
-            //     expect(gameState.currentRound).to.equal(4);
+            console.log("\n=== Showdown Results ===");
+            console.log({
+                utgHoleCards: utgHoleCardsNum,
+                buttonHoleCards: buttonHoleCardsNum,
+                communityCards: communityCardsNum,
+                winner: winner === 1 ? "UTG" : winner === 2 ? "BUTTON" : "Split pot"
+            });
+
+            // Verify winner gets the pot
+            const utgFinalStack = await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack);
+            const buttonFinalStack = await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack);
+
+            console.log("\n=== Final Stacks ===");
+            console.log({
+                UTG: utgFinalStack,
+                BUTTON: buttonFinalStack,
+                initialStack: INITIAL_STACK
+            });
+
+            // Winner should have more chips than initial stack
+            if (winner === 1) {
+                console.log("UTG wins");
+                expect(utgFinalStack).to.be.gt(INITIAL_STACK);
+                expect(buttonFinalStack).to.be.lt(INITIAL_STACK);
+            } else if (winner === 2) {
+                console.log("BUTTON wins");
+                expect(buttonFinalStack).to.be.gt(INITIAL_STACK);
+                expect(utgFinalStack).to.be.lt(INITIAL_STACK);
+            } else {
+                console.log("Split pot");
+                expect(utgFinalStack).to.equal(INITIAL_STACK);
+                expect(buttonFinalStack).to.equal(INITIAL_STACK);
+            }
         });
 
-        // Test game flow with mixed actions (calls, raises, and folds)
-        // it("Should handle mixed actions correctly across rounds", async function () {
-        //     // Pre-flop round
-        //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 150);
-        //     await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
-        //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
-        //     await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
-        //     await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
-
-        //     // Verify flop round with correct active players
-        //     let gameState = await stateStorage.getGameState();
-        //     expect(gameState.currentRound).to.equal(1);
-        //     expect(gameState.currentTurn).to.equal(players[BB].address); // BB starts as SB folded
-
-        //     // Flop round
-        //     await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
-        //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 300);
-        //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
-        //     await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
-
-        //     // Verify turn round with remaining players
-        //     gameState = await stateStorage.getGameState();
-        //     expect(gameState.currentRound).to.equal(2);
-        //     expect(gameState.currentTurn).to.equal(players[UTG].address); // UTG starts as BB folded
-
-        //     // Complete hand with remaining players
-        //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
-        //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CHECK, 0);
-
-        //     // Verify river round
-        //     gameState = await stateStorage.getGameState();
-        //     expect(gameState.currentRound).to.equal(3);
-
-        //     // River round
-        //     await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
-        //     await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CHECK, 0);
-
-        //     // Verify hand complete
-        //     gameState = await stateStorage.getGameState();
-        //     expect(gameState.currentRound).to.equal(4);
-        // });
     });
 });

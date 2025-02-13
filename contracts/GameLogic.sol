@@ -509,21 +509,43 @@ contract GameLogic is IGameLogic {
     
     function _shouldShowdown() private view returns (bool) {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        console.log("_shouldShowdown - Current round:", uint(gameState.currentRound));
+        console.log("Is River round?", gameState.currentRound == IStateStorage.BettingRound.River);
         return gameState.currentRound == IStateStorage.BettingRound.River;
     }
     
     function _initiateShowdown() private {
+        console.log("\n=== Initiating Showdown ===");
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        console.log("Current round:", uint(gameState.currentRound));
+        console.log("Main pot:", gameState.mainPot);
         
-        // Get all active players
-        address[] memory activePlayers = new address[](_getActivePlayerCount());
-        uint8 activeIndex = 0;
-        
+        // First count active players
+        uint8 activeCount = 0;
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
+                    activeCount++;
+                }
+            }
+        }
+
+        console.log("Total active players:", activeCount);
+        require(activeCount > 0, "No active players for showdown");
+        
+        // Create array of exact size needed
+        address[] memory activePlayers = new address[](activeCount);
+        uint8 activeIndex = 0;
+        
+        console.log("Getting active players for showdown...");
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddress = stateStorage.getPlayerAtPosition(i);
+            if (playerAddress != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
+                if (player.status == IStateStorage.PlayerStatus.Active) {
+                    console.log("Active player found at position", i, ":", playerAddress);
                     activePlayers[activeIndex] = playerAddress;
                     activeIndex++;
                     handManager.revealHand(playerAddress);
@@ -531,34 +553,56 @@ contract GameLogic is IGameLogic {
             }
         }
         
+        console.log("Total active players in showdown:", activeIndex);
+        require(activeIndex == activeCount, "Active player count mismatch");
+        
         address winner = _determineWinner(activePlayers);
+        console.log("Determined winner:", winner);
+        
         _awardPot(winner);
+        console.log("Pot awarded to winner");
         
         // Reset for next hand
+        gameState.currentRound = IStateStorage.BettingRound.PreFlop;
         gameState.currentBet = 0;
         gameState.mainPot = 0;
         gameState.lastRaise = 0;
         stateStorage.updateGameState(gameState);
+        console.log("Game state reset for next hand");
+        console.log("=== Showdown Complete ===\n");
     }
     
     function _determineWinner(address[] memory activePlayers) private view returns (address) {
         require(activePlayers.length > 0, "No active players");
+        console.log("\n=== Determining Winner ===");
+        console.log("Number of active players:", activePlayers.length);
         
         address bestPlayer = activePlayers[0];
         uint8[2] memory bestHoleCards = stateStorage.getPlayer(bestPlayer).holeCards;
         uint8[5] memory communityCards = stateStorage.getGameState().communityCards;
-        (uint32 bestRank, ) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
+        (uint32 bestRank, uint8 bestHandType) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
+        
+        console.log("Initial best player:", bestPlayer);
+        console.log("Initial best rank:", bestRank);
+        console.log("Initial hand type:", bestHandType);
         
         for (uint i = 1; i < activePlayers.length; i++) {
             uint8[2] memory currentHoleCards = stateStorage.getPlayer(activePlayers[i]).holeCards;
-            (uint32 currentRank, ) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
+            (uint32 currentRank, uint8 currentHandType) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
+            
+            console.log("Comparing player:", activePlayers[i]);
+            console.log("Current rank:", currentRank);
+            console.log("Current hand type:", currentHandType);
             
             if (currentRank < bestRank) {
                 bestPlayer = activePlayers[i];
                 bestRank = currentRank;
+                console.log("New best player found:", bestPlayer);
             }
         }
         
+        console.log("Final winner:", bestPlayer);
+        console.log("=== Winner Determination Complete ===\n");
         return bestPlayer;
     }
     

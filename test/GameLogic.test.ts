@@ -127,16 +127,9 @@ describe("GameLogic - Player Order", function () {
 
 
     async function verifyPlayerPositions() {
-        console.log("\nVerifying all player positions:");
         for (let i = 0; i < 5; i++) {
             const addr = await stateStorage.getPlayerAtPosition(i);
             const player = await stateStorage.getPlayer(addr);
-            console.log(`Position ${i}:
-                Address: ${addr}
-                Stored Position: ${player.position}
-                Status: ${player.status}
-                Stack: ${player.stack}
-            `);
         }
     }
 
@@ -414,22 +407,18 @@ describe("GameLogic - Player Order", function () {
         it("Should end game in flop round when all but one player folds", async function () {
             // Pre-flop round - all players call to reach flop
             let currentTurn = (await stateStorage.getGameState()).currentTurn;
-            console.log("\n=== Starting Pre-flop Round ===");
-            console.log("Initial turn:", currentTurn);
             expect(currentTurn).to.equal(players[UTG].address);
 
             // All players call pre-flop
             for (let pos of [UTG, MP, BUTTON]) {
                 await gameLogic.connect(players[pos]).processAction(players[pos].address, CALL, 0);
                 currentTurn = (await stateStorage.getGameState()).currentTurn;
-                console.log(`After ${pos} calls, next turn:`, currentTurn);
                 expect(currentTurn).to.equal(players[(pos + 1) % 5].address);
             }
 
             // SB completes the call
             await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
-            console.log("After SB calls, next turn:", currentTurn);
             expect(currentTurn).to.equal(players[BB].address);
 
             // BB checks to end pre-flop
@@ -437,36 +426,27 @@ describe("GameLogic - Player Order", function () {
 
             // Verify flop round started
             let gameState = await stateStorage.getGameState();
-            console.log("\n=== Starting Flop Round ===");
-            console.log("Current round:", gameState.currentRound);
-            console.log("Current turn:", gameState.currentTurn);
-            console.log("Current bet:", gameState.currentBet);
             expect(gameState.currentRound).to.equal(1); // Flop round
             expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts post-flop
             expect(gameState.currentBet).to.equal(0); // Bets reset
 
             // Store BUTTON's initial stack for later comparison
             const buttonInitialStack = await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack);
-            console.log("BUTTON initial stack:", buttonInitialStack);
 
             // Flop round - BUTTON will be the winner as everyone else folds
-            console.log("\n=== Players Folding Sequence ===");
             // SB folds
             await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
-            console.log("After SB folds, next turn:", currentTurn);
             expect(currentTurn).to.equal(players[BB].address);
 
             // BB folds
             await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
-            console.log("After BB folds, next turn:", currentTurn);
             expect(currentTurn).to.equal(players[UTG].address);
 
             // UTG folds
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, FOLD, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
-            console.log("After UTG folds, next turn:", currentTurn);
             expect(currentTurn).to.equal(players[MP].address);
 
             // MP folds - this should end the game as BUTTON is the only player left
@@ -474,24 +454,15 @@ describe("GameLogic - Player Order", function () {
 
             // Verify game has ended and reset to pre-flop
             gameState = await stateStorage.getGameState();
-            console.log("\n=== Game End State ===");
-            console.log("Final round:", gameState.currentRound);
-            console.log("Final turn:", gameState.currentTurn);
-            console.log("Final bet:", gameState.currentBet);
-            // TODO @Ziga - This is not working as expected (RESET THE GAME STATE EVEN IF WE DONT REACH THE RIVER ROUND SHOWDOWN)
-            //expect(gameState.currentRound).to.equal(0); // Game resets to PreFlop
+            expect(gameState.currentRound).to.equal(0); // Game resets to PreFlop
 
             // Verify BUTTON won the pot
             const buttonFinalStack = await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack);
-            console.log("\n=== Stack Verification ===");
-            console.log("BUTTON final stack:", buttonFinalStack);
-            console.log("BUTTON stack difference:", buttonFinalStack - buttonInitialStack);
             expect(buttonFinalStack).to.be.gte(buttonInitialStack);
 
             // Verify other players lost their bets
             for (let pos of [SB, BB, UTG, MP]) {
                 const playerStack = await stateStorage.getPlayer(players[pos].address).then((p: { stack: number }) => p.stack);
-                console.log(`${pos} final stack:`, playerStack);
                 expect(playerStack).to.be.lte(INITIAL_STACK);
             }
         });

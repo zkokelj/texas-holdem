@@ -315,7 +315,9 @@ contract GameLogic is IGameLogic {
         playerState.status = IStateStorage.PlayerStatus.Folded;
         stateStorage.updatePlayerState(player, playerState);
         
-        if (_getActivePlayerCount() == 1) {
+        uint8 activeCount = _getActivePlayerCount();
+        
+        if (activeCount == 1) {
             _awardPotToLastPlayer();
         } else {
             _moveToNextPlayer();
@@ -396,13 +398,14 @@ contract GameLogic is IGameLogic {
     }
     
     function _moveToNextPlayer() private {
+        if (_getActivePlayerCount() == 1) {
+            _awardPotToLastPlayer();
+            return;
+        }
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        
         bool roundComplete = _isRoundComplete();
-        
         if (roundComplete) {
             bool shouldShowdown = _shouldShowdown();
-            
             if (shouldShowdown) {
                 _initiateShowdown();
             } else {
@@ -412,12 +415,7 @@ contract GameLogic is IGameLogic {
             address nextPlayer = _getNextActivePlayer(gameState.currentTurn);
             gameState.currentTurn = nextPlayer;
             stateStorage.updateGameState(gameState);
-
-            emit ActionTimerStarted(
-                nextPlayer,
-                gameState.actionTimer,
-                block.number
-            );
+            emit ActionTimerStarted(nextPlayer, gameState.actionTimer, block.number);
         }
     }
     
@@ -443,7 +441,17 @@ contract GameLogic is IGameLogic {
     }
     
     function _getActivePlayerCount() private view returns (uint8) {
-        return stateStorage.getTournamentState().activePlayerCount;
+        uint8 count = 0;
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddress = stateStorage.getPlayerAtPosition(i);
+            if (playerAddress != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
+                if (player.status == IStateStorage.PlayerStatus.Active) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
     
     function _isRoundComplete() private view returns (bool) {
@@ -487,8 +495,6 @@ contract GameLogic is IGameLogic {
     }
     
     function _initiateShowdown() private {
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        
         // First count active players
         uint8 activeCount = 0;
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
@@ -525,12 +531,7 @@ contract GameLogic is IGameLogic {
         
         _awardPot(winner);
         
-        // Reset for next hand
-        gameState.currentRound = IStateStorage.BettingRound.PreFlop;
-        gameState.currentBet = 0;
-        gameState.mainPot = 0;
-        gameState.lastRaise = 0;
-        stateStorage.updateGameState(gameState);
+        _resetGameState();
     }
     
     function _determineWinner(address[] memory activePlayers) private view returns (address) {
@@ -582,18 +583,8 @@ contract GameLogic is IGameLogic {
         
         require(activePlayers == 1, "More than one player active");
         _awardPot(lastPlayer);
-
-        // Reset game state for next hand
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        gameState.currentRound = IStateStorage.BettingRound.PreFlop;
-        gameState.currentBet = 0;
-        gameState.mainPot = 0;
-        gameState.lastRaise = 0;
-        gameState.currentTurn = _getNextActivePlayer(address(0)); // Reset turn to first active player
-        stateStorage.updateGameState(gameState);
-
-        // Emit event to signal game reset
-        emit RoundComplete(gameState.currentRound);
+        _resetGameState();
+        emit RoundComplete(IStateStorage.BettingRound.PreFlop);
     }
     
     function _updateGameState() private {
@@ -616,6 +607,17 @@ contract GameLogic is IGameLogic {
                 block.number
             );
         }
+    }
+
+    // New helper function to reset the game state for a new hand
+    function _resetGameState() private {
+        IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        gameState.currentRound = IStateStorage.BettingRound.PreFlop;
+        gameState.currentBet = 0;
+        gameState.mainPot = 0;
+        gameState.lastRaise = 0;
+        gameState.currentTurn = _getNextActivePlayer(address(0));
+        stateStorage.updateGameState(gameState);
     }
 
     // Helper function to convert uint to string for logging

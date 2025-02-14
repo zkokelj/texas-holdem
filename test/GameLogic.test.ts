@@ -537,4 +537,118 @@ describe("GameLogic - Player Order", function () {
             expect(gameStateAfter.currentTurn).to.not.equal(timeoutPlayer);
         });
     });
+
+    // Full Game Flow with Multiple Raises, Folds, and Showdown (Edge Cases):
+    // This test simulates an entire game hand from pre-flop to showdown with multiple actions,
+    // including raises, calls, folds, and then a showdown. At the end, after showdown,
+    // the game state should be reset (to PreFlop) and the main pot should be cleared.
+    describe("Full Game Flow with Multiple Raises, Folds, and Showdown (Edge Cases)", function () {
+        it("should complete a full game flow and reset the game state after showdown", async function () {
+            // Set up initial game state
+            await setupGameState();
+
+            // --- Pre-Flop Round --- 
+            // UTG calls
+            let currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[UTG].address);
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            // MP calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[MP].address);
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+
+            // BTN calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[BUTTON].address);
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+
+            // SB calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[SB].address);
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
+
+            // BB checks
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[BB].address);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+
+            // Pre-Flop round ends, game should move to Flop
+            let gameState = await stateStorage.getGameState();
+            expect(gameState.currentRound).to.equal(1);
+
+            // --- Flop Round --- 
+            // Flop round starts with SB
+            // SB raises with 100
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, RAISE, 100);
+
+            // Next active player: BB calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[BB].address);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+
+            // Next active player: UTG calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            // Next active player: MP calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+
+            // Next active player: BTN calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+
+            // Flop round ends, game should move to Turn
+            gameState = await stateStorage.getGameState();
+            expect(gameState.currentRound).to.equal(2);
+
+            // --- Turn Round ---
+            // Turn round starts with SB
+            // UTG raises on turn with 200
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 200);
+
+            // Next active player: MP folds on turn
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
+
+            // Next active player: BTN calls the raise
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+
+            // Next active player: SB calls the raise
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
+
+            // Next active player: BB calls the raise
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+
+            // Turn round ends, game should move to River
+            gameState = await stateStorage.getGameState();
+            expect(gameState.currentRound).to.equal(3);
+
+            // --- River Round ---
+            // River round starts with SB (player to the left of BTN)
+            // SB raises on river with 300
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, RAISE, 300);
+
+            // Next active player: BB calls on river
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+
+            // Next active player: UTG calls on river
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            // Next active player: BTN calls on river
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+
+            // After all actions on river, showdown should be triggered and game state resets
+            gameState = await stateStorage.getGameState();
+            expect(gameState.currentRound).to.equal(0); // Game resets to PreFlop
+            expect(gameState.mainPot).to.equal(0); // Pot should be cleared
+        });
+    });
 });

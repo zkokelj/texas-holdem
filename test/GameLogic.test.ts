@@ -513,4 +513,28 @@ describe("GameLogic - Player Order", function () {
             ).to.be.revertedWith("Raise too small");
         });
     });
+
+    // Player Timeout Scenarios
+    // This test verifies that when a player times out, they are automatically folded and the game moves to the next active player.
+    describe("Player Timeout Scenarios", function () {
+        it("Should process timeout correctly by folding the timed-out player", async function () {
+            // Set up the initial game state
+            await setupGameState();
+
+            // Get the current turn player (should be UTG per setupGameState)
+            const gameStateBefore = await stateStorage.getGameState();
+            const timeoutPlayer = gameStateBefore.currentTurn;
+
+            // Call handlePlayerTimeout for the current turn player
+            await gameLogic.handlePlayerTimeout(timeoutPlayer);
+
+            // Verify that the timed-out player's status is not active (active = 1), implying they were folded
+            const timedOutPlayer = await stateStorage.getPlayer(timeoutPlayer);
+            expect(timedOutPlayer.status).to.not.equal(1);
+
+            // Verify that the game state's current turn has moved to a different player
+            const gameStateAfter = await stateStorage.getGameState();
+            expect(gameStateAfter.currentTurn).to.not.equal(timeoutPlayer);
+        });
+    });
 });

@@ -505,6 +505,32 @@ describe("GameLogic - Player Order", function () {
                 gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 10)
             ).to.be.revertedWith("Raise too small");
         });
+
+        // Test for out-of-turn action
+        it("Should revert when player acts out of turn", async function () {
+            // Set up initial game state
+            await setupGameState();
+
+            // In pre-flop, UTG should act first, but let's try to act with MP
+            await expect(
+                gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0)
+            ).to.be.revertedWith("Not your turn");
+
+            // Let UTG act first (valid action)
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            // Now it's MP's turn, but let's try to act with BTN
+            await expect(
+                gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0)
+            ).to.be.revertedWith("Not your turn");
+
+            // Let MP act (valid action)
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+
+            // Verify the game state is still correct
+            const gameState = await stateStorage.getGameState();
+            expect(gameState.currentTurn).to.equal(players[BUTTON].address);
+        });
     });
 
     // Player Timeout Scenarios

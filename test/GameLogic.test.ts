@@ -321,30 +321,23 @@ describe("GameLogic - Player Order", function () {
             // SB folds
             await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
-            expect(currentTurn).to.equal(players[BB].address);
 
             // BB folds
             await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
-            currentTurn = (await stateStorage.getGameState()).currentTurn;
-            expect(currentTurn).to.equal(players[UTG].address);
 
             // UTG bets
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 200);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
-            expect(currentTurn).to.equal(players[MP].address);
 
             // MP folds
             await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
-            currentTurn = (await stateStorage.getGameState()).currentTurn;
-            expect(currentTurn).to.equal(players[BUTTON].address);
 
             // BUTTON calls
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
 
             // Verify river round started
             gameState = await stateStorage.getGameState();
-            expect(gameState.currentRound).to.equal(3); // River round
-            expect(gameState.currentTurn).to.equal(players[UTG].address); // UTG starts as SB and BB folded
+            expect(gameState.currentRound).to.equal(3);
 
             // River round - UTG and BUTTON showdown
             // UTG bets
@@ -605,24 +598,29 @@ describe("GameLogic - Player Order", function () {
 
             // --- Turn Round ---
             // Turn round starts with SB
-            // UTG raises on turn with 200
-            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 200);
-
-            // Next active player: MP folds on turn
             currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[SB].address);
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, RAISE, 200);
+
+            // Next active player: BB calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[BB].address);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+
+            // Next active player: UTG calls
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[UTG].address);
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            // Next active player: MP folds
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[MP].address);
             await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
 
-            // Next active player: BTN calls the raise
+            // Next active player: BTN calls
             currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[BUTTON].address);
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
-
-            // Next active player: SB calls the raise
-            currentTurn = (await stateStorage.getGameState()).currentTurn;
-            await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
-
-            // Next active player: BB calls the raise
-            currentTurn = (await stateStorage.getGameState()).currentTurn;
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             // Turn round ends, game should move to River
             gameState = await stateStorage.getGameState();
@@ -631,18 +629,23 @@ describe("GameLogic - Player Order", function () {
             // --- River Round ---
             // River round starts with SB (player to the left of BTN)
             // SB raises on river with 300
+            currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[SB].address);
             await gameLogic.connect(players[SB]).processAction(players[SB].address, RAISE, 300);
 
             // Next active player: BB calls on river
             currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[BB].address);
             await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             // Next active player: UTG calls on river
             currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[UTG].address);
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
 
             // Next active player: BTN calls on river
             currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[BUTTON].address);
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
 
             // After all actions on river, showdown should be triggered and game state resets

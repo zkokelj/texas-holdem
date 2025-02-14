@@ -582,6 +582,18 @@ contract GameLogic is IGameLogic {
         
         require(activePlayers == 1, "More than one player active");
         _awardPot(lastPlayer);
+
+        // Reset game state for next hand
+        IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        gameState.currentRound = IStateStorage.BettingRound.PreFlop;
+        gameState.currentBet = 0;
+        gameState.mainPot = 0;
+        gameState.lastRaise = 0;
+        gameState.currentTurn = _getNextActivePlayer(address(0)); // Reset turn to first active player
+        stateStorage.updateGameState(gameState);
+
+        // Emit event to signal game reset
+        emit RoundComplete(gameState.currentRound);
     }
     
     function _updateGameState() private {

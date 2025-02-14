@@ -490,6 +490,66 @@ describe("GameLogic - Player Order", function () {
             const gameState = await stateStorage.getGameState();
             expect(gameState.mainPot).to.be.at.least(100);
         });
+
+        // Test for a round where all players check
+        it("Should allow all players to check in flop round when no bets are made", async function () {
+            // Complete pre-flop round first
+            console.log("\n--- Pre-flop Round ---");
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+
+            // Move to flop round
+            let gameState = await stateStorage.getGameState();
+            console.log("\n--- Entering Flop Round ---");
+            console.log("Current Round:", gameState.currentRound);
+            console.log("Current Turn:", gameState.currentTurn);
+            console.log("Current Bet:", gameState.currentBet);
+            expect(gameState.currentRound).to.equal(1); // Flop round
+            expect(gameState.currentTurn).to.equal(players[SB].address);
+            expect(gameState.currentBet).to.equal(0); // No bets made yet
+
+            // All players check in sequence
+            console.log("\n--- Flop Round Checks ---");
+            // SB checks
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, CHECK, 0);
+            gameState = await stateStorage.getGameState();
+            console.log("After SB check - Current Turn:", gameState.currentTurn);
+            expect(gameState.currentTurn).to.equal(players[BB].address);
+
+            // BB checks
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            gameState = await stateStorage.getGameState();
+            console.log("After BB check - Current Turn:", gameState.currentTurn);
+            expect(gameState.currentTurn).to.equal(players[UTG].address);
+
+            // UTG checks
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
+            gameState = await stateStorage.getGameState();
+            console.log("After UTG check - Current Turn:", gameState.currentTurn);
+            expect(gameState.currentTurn).to.equal(players[MP].address);
+
+            // MP checks
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CHECK, 0);
+            gameState = await stateStorage.getGameState();
+            console.log("After MP check - Current Turn:", gameState.currentTurn);
+            expect(gameState.currentTurn).to.equal(players[BUTTON].address);
+
+            // BTN checks
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CHECK, 0);
+
+            // Verify round progressed to Turn
+            gameState = await stateStorage.getGameState();
+            console.log("\n--- After All Checks ---");
+            console.log("Current Round:", gameState.currentRound);
+            console.log("Current Bet:", gameState.currentBet);
+            console.log("Current Turn:", gameState.currentTurn);
+            expect(gameState.currentRound).to.equal(2); // Turn round
+            expect(gameState.currentBet).to.equal(0); // Still no bets
+            expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts turn round
+        });
     });
 
     // Revert Scenarios

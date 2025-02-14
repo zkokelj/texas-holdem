@@ -498,4 +498,19 @@ describe("GameLogic - Player Order", function () {
             expect(gameState.mainPot).to.be.at.least(100);
         });
     });
+
+    // Revert Scenarios
+    // This test verifies that if a player attempts a raise with an amount below the minimum required (i.e., too small),
+    // the transaction should revert with the error message 'Raise too small'.
+    describe("Revert Scenarios", function () {
+        it("Should revert when raise amount is too small", async function () {
+            // Set up initial game state
+            await setupGameState();
+
+            // UTG attempts to raise with an amount that's too small (10 < BIG_BLIND)
+            await expect(
+                gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 10)
+            ).to.be.revertedWith("Raise too small");
+        });
+    });
 });

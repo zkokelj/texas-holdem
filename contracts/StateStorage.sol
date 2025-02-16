@@ -7,6 +7,7 @@ contract StateStorage {
     // State storage
     mapping(address => Player) private players;
     mapping(uint8 => address) private positionToPlayer;
+    mapping(address => bool) private hasActedInCurrentRound;  // New: Track player actions
     TournamentState private tournamentState;
     GameState private gameState;
     BlindLevel[] private blindLevels;
@@ -113,6 +114,25 @@ contract StateStorage {
         gameState.lastRaise = 0;
     }
 
+    // New functions for action tracking
+    function hasPlayerActedInRound(address player) external view returns (bool) {
+        return hasActedInCurrentRound[player];
+    }
+
+    function setPlayerActedInRound(address player, bool acted) external onlyAuthorized {
+        hasActedInCurrentRound[player] = acted;
+    }
+
+    // Reset all player actions for new round
+    function resetPlayerActions() external onlyAuthorized {
+        for (uint8 i = 0; i < 9; i++) {  // MAX_PLAYERS = 9
+            address player = positionToPlayer[i];
+            if (player != address(0)) {
+                hasActedInCurrentRound[player] = false;
+            }
+        }
+    }
+
     // Access control
     function authorizeContract(address contractAddress) external onlyOwner {
         require(contractAddress != address(0), "Invalid address");
@@ -135,7 +155,6 @@ contract StateStorage {
         return positionToPlayer[position];
     }
 
-    // New function to get tournament state values
     function getTournamentStateValues() external view returns (
         uint256 smallBlind, 
         uint256 bigBlind,
@@ -169,14 +188,13 @@ contract StateStorage {
     }
 
     function updateTournamentState(TournamentState memory newState) external onlyAuthorized {
-    tournamentState = newState;
-}
+        tournamentState = newState;
+    }
 
     function getGameState() external view returns (GameState memory) {
         return gameState;
     }
 
-    // State setters - only callable by authorized contracts
     function updatePlayerState(address player, Player memory newState) external onlyAuthorized {
         players[player] = newState;
         if (newState.status == PlayerStatus.Eliminated) {
@@ -186,86 +204,108 @@ contract StateStorage {
         }
     }
 
-function updateTournamentBlinds(uint256 small, uint256 big) external onlyAuthorized {
-    tournamentState.smallBlind = small;
-    tournamentState.bigBlind = big;
-}
-
-function getGameStateValues() external view returns (
-    uint256 actionTimer,
-    uint8[5] memory communityCards,
-    uint8 currentRound,
-    uint256 mainPot,
-    uint256 currentBet,
-    uint256 lastRaise,
-    uint256 minRaise,
-    uint8 lastAggressor,
-    address currentTurn,
-    uint256 handStartTime,
-    uint256 lastActionAmount
-) {
-    return (
-        gameState.actionTimer,
-        gameState.communityCards,
-        uint8(gameState.currentRound),
-        gameState.mainPot,
-        gameState.currentBet,
-        gameState.lastRaise,
-        gameState.minRaise,
-        gameState.lastAggressor,
-        gameState.currentTurn,
-        gameState.handStartTime,
-        gameState.lastActionAmount
-    );
-}
-
-function updateGameBasics(
-    uint8 currentRound,
-    uint256 mainPot,
-    uint256 currentBet,
-    address currentTurn
-) external onlyAuthorized {
-    gameState.currentRound = BettingRound(currentRound);
-    gameState.mainPot = mainPot;
-    gameState.currentBet = currentBet;
-    gameState.currentTurn = currentTurn;
-}
-
-function updateGameCards(uint8[5] calldata communityCards) external onlyAuthorized {
-    gameState.communityCards = communityCards;
-}
-
-function updateGameTimers(
-    uint256 actionTimer,
-    uint256 handStartTime
-) external onlyAuthorized {
-    gameState.actionTimer = actionTimer;
-    gameState.handStartTime = handStartTime;
-}
-
-function updateTournamentStatus(
-    TableState newState,
-    uint8 activeCount,
-    bool isPaused
-) external onlyAuthorized {
-    tournamentState.tableState = newState;
-    tournamentState.activePlayerCount = activeCount;
-    tournamentState.isPaused = isPaused;
-    if (newState == TableState.Active && tournamentState.startTime == 0) {
-        tournamentState.startTime = block.timestamp;  // Set start time when activating tournament
+    function updateTournamentBlinds(uint256 small, uint256 big) external onlyAuthorized {
+        tournamentState.smallBlind = small;
+        tournamentState.bigBlind = big;
     }
-}
 
-function updateTournamentPositions(
-    uint8 button,
-    uint8 dealer
-) external onlyAuthorized {
-    tournamentState.buttonPosition = button;
-    tournamentState.dealerPosition = dealer;
-}
+    function getGameStateValues() external view returns (
+        uint256 actionTimer,
+        uint8[5] memory communityCards,
+        uint8 currentRound,
+        uint256 mainPot,
+        uint256 currentBet,
+        uint256 lastRaise,
+        uint256 minRaise,
+        uint8 lastAggressor,
+        address currentTurn,
+        uint256 handStartTime,
+        uint256 lastActionAmount
+    ) {
+        return (
+            gameState.actionTimer,
+            gameState.communityCards,
+            uint8(gameState.currentRound),
+            gameState.mainPot,
+            gameState.currentBet,
+            gameState.lastRaise,
+            gameState.minRaise,
+            gameState.lastAggressor,
+            gameState.currentTurn,
+            gameState.handStartTime,
+            gameState.lastActionAmount
+        );
+    }
+
+    function updateGameBasics(
+        uint8 currentRound,
+        uint256 mainPot,
+        uint256 currentBet,
+        address currentTurn
+    ) external onlyAuthorized {
+        gameState.currentRound = BettingRound(currentRound);
+        gameState.mainPot = mainPot;
+        gameState.currentBet = currentBet;
+        gameState.currentTurn = currentTurn;
+    }
+
+    function updateGameCards(uint8[5] calldata communityCards) external onlyAuthorized {
+        gameState.communityCards = communityCards;
+    }
+
+    function updateGameTimers(
+        uint256 actionTimer,
+        uint256 handStartTime
+    ) external onlyAuthorized {
+        gameState.actionTimer = actionTimer;
+        gameState.handStartTime = handStartTime;
+    }
+
+    function updateTournamentStatus(
+        TableState newState,
+        uint8 activeCount,
+        bool isPaused
+    ) external onlyAuthorized {
+        tournamentState.tableState = newState;
+        tournamentState.activePlayerCount = activeCount;
+        tournamentState.isPaused = isPaused;
+        if (newState == TableState.Active && tournamentState.startTime == 0) {
+            tournamentState.startTime = block.timestamp;
+        }
+    }
+
+    function updateTournamentPositions(
+        uint8 button,
+        uint8 dealer
+    ) external onlyAuthorized {
+        tournamentState.buttonPosition = button;
+        tournamentState.dealerPosition = dealer;
+    }
 
     function updateGameState(GameState memory newState) external onlyAuthorized {
         gameState = newState;
+    }
+
+    // Side pot functions
+    function getSidePot(uint256 index) external view returns (uint256 amount, bool isResolved) {
+        return (sidePots[index].amount, sidePots[index].isResolved);
+    }
+
+    function createSidePot(uint256 index, uint256 amount) external onlyAuthorized {
+        sidePots[index] = SidePot(amount, false);
+        sidePotCount++;
+    }
+
+    function setPotEligibility(uint256 potIndex, address player, bool eligible) external onlyAuthorized {
+        potEligibility[potIndex][player] = eligible;
+    }
+
+    function setSidePotResolved(uint256 index) external onlyAuthorized {
+        sidePots[index].isResolved = true;
+    }
+
+    function isPlayerEligibleForPot(uint256 potIndex, address player) external view returns (bool) {
+        return potEligibility[potIndex][player];
     }
 
     // Utility getters
@@ -273,15 +313,7 @@ function updateTournamentPositions(
         return (tournamentState.smallBlind, tournamentState.bigBlind);
     }
 
-    function getSidePot(uint256 index) external view returns (SidePot memory) {
-        return sidePots[index];
-    }
-
-    function isPlayerEligibleForPot(uint256 potIndex, address player) external view returns (bool) {
-        return potEligibility[potIndex][player];
-    }
-
-    //Blind Functions
+    // Blind Functions
     function getCurrentBlindLevel() external view returns (BlindLevel memory) {
         require(blindLevels.length > 0, "No blind levels");
         return blindLevels[blindLevels.length - 1];

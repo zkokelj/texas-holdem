@@ -258,8 +258,38 @@ contract GameLogic is IGameLogic {
     function _nextRound() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         
-        // Validate state before dealing cards
         require(gameState.currentRound < IStateStorage.BettingRound.River, "Hand complete");
+
+        console.log("Resetting player bets");
+        // Reset all players' current bets and action tracking
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddr = stateStorage.getPlayerAtPosition(i);
+            if (playerAddr != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
+                if (player.status == IStateStorage.PlayerStatus.Active) {
+                    player.currentBet = 0;
+                    stateStorage.updatePlayerState(playerAddr, player);
+                    stateStorage.setPlayerActedInRound(playerAddr, false);
+                }
+            }
+        }
+        console.log("Resetting player bets done");
+        
+        // Reset betting state for new round
+        gameState.currentBet = 0;
+        gameState.lastRaise = 0;
+        
+        // Get SB position for post-flop rounds
+        address sbPlayer = stateStorage.getPlayerAtPosition(1); // SB is at position 1
+        
+        // For post-flop rounds, start with SB if active, otherwise next active player after SB
+        if (gameState.currentRound >= IStateStorage.BettingRound.PreFlop) {
+            gameState.currentTurn = sbPlayer != address(0) ? 
+                _getNextActivePlayer(stateStorage.getPlayerAtPosition(0)) : // Start from button to get to SB
+                _getNextActivePlayer(address(0));
+        } else {
+            gameState.currentTurn = _getNextActivePlayer(address(0));
+        }
         
         console.log("\n--- Moving to Next Round ---");
         console.log("Current Round:", uint256(gameState.currentRound));
@@ -286,17 +316,11 @@ contract GameLogic is IGameLogic {
             gameState.currentRound = IStateStorage.BettingRound.River;
         }
         
-        // Reset betting state for new round
-        gameState.currentBet = 0;
-        gameState.lastRaise = 0;
-        gameState.currentTurn = _getNextActivePlayer(address(0));
-        
         console.log("New Round State:");
         console.log("  Round:", uint256(gameState.currentRound));
         console.log("  Current Turn:", gameState.currentTurn);
         console.log("  Current Bet:", gameState.currentBet);
         
-        // Atomic state update
         stateStorage.updateGameState(gameState);
         emit RoundStarted(gameState.currentRound);
     }
@@ -348,6 +372,9 @@ contract GameLogic is IGameLogic {
         require(gameState.currentBet == 0 || playerState.currentBet == gameState.currentBet, 
             "Cannot check");
             
+        // Mark player as having acted
+        stateStorage.setPlayerActedInRound(player, true);
+
         _moveToNextPlayer();
     }
     
@@ -365,6 +392,9 @@ contract GameLogic is IGameLogic {
         
         stateStorage.updatePlayerState(player, playerState);
         stateStorage.updateGameState(gameState);
+
+        // Mark player as having acted
+        stateStorage.setPlayerActedInRound(player, true);
         
         _moveToNextPlayer();
     }
@@ -374,22 +404,14 @@ contract GameLogic is IGameLogic {
         IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
         IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
         
-        // Validate raise amount first
         require(raiseAmount > 0, "Raise amount must be positive");
         
-        // Calculate total amount to put in (current bet - already put in + new raise)
-        uint256 toCall;
-        if (gameState.currentBet > playerState.currentBet) {
-            toCall = gameState.currentBet - playerState.currentBet;
-        } else {
-            toCall = 0;
-        }
+        uint256 toCall = gameState.currentBet > playerState.currentBet ? 
+            gameState.currentBet - playerState.currentBet : 0;
         
-        // Check for overflow in totalAmount calculation
         require(raiseAmount <= type(uint256).max - toCall, "Raise amount too large");
         uint256 totalAmount = toCall + raiseAmount;
         
-        // Minimum raise is previous raise amount or BB if no previous raise
         uint256 minRaiseAmount = gameState.lastRaise > 0 ? gameState.lastRaise : tournament.bigBlind;
         require(raiseAmount >= minRaiseAmount, "Raise too small");
         require(playerState.stack >= totalAmount, "Not enough chips");
@@ -406,6 +428,20 @@ contract GameLogic is IGameLogic {
             gameState.lastRaise = raiseAmount;
             gameState.lastActionAmount = totalAmount;
             gameState.lastAggressor = playerState.position;
+            
+            // Mark player as having acted
+            stateStorage.setPlayerActedInRound(player, true);
+            
+            // Reset other players' action flags since there's been a raise
+            for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+                address otherPlayer = stateStorage.getPlayerAtPosition(i);
+                if (otherPlayer != address(0) && otherPlayer != player) {
+                    IStateStorage.Player memory otherPlayerState = stateStorage.getPlayer(otherPlayer);
+                    if (otherPlayerState.status == IStateStorage.PlayerStatus.Active) {
+                        stateStorage.setPlayerActedInRound(otherPlayer, false);
+                    }
+                }
+            }
             
             stateStorage.updatePlayerState(player, playerState);
             stateStorage.updateGameState(gameState);
@@ -495,7 +531,7 @@ contract GameLogic is IGameLogic {
                 IStateStorage.Player memory bbPlayerState = stateStorage.getPlayer(bbPlayer);
                 if (bbPlayerState.currentBet == gameState.currentBet && 
                     bbPlayerState.status == IStateStorage.PlayerStatus.Active &&
-                    gameState.currentTurn != bbPlayer) {
+                    !stateStorage.hasPlayerActedInRound(bbPlayer)) {
                     console.log("BB hasn't acted yet - round not complete");
                     return false;
                 }
@@ -503,7 +539,7 @@ contract GameLogic is IGameLogic {
         }
         
         uint8 activeCount = 0;
-        uint8 matchedCount = 0;
+        uint8 actedCount = 0;
         
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
@@ -511,8 +547,8 @@ contract GameLogic is IGameLogic {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
                     activeCount++;
-                    if (player.currentBet == gameState.currentBet) {
-                        matchedCount++;
+                    if (stateStorage.hasPlayerActedInRound(playerAddress)) {
+                        actedCount++;
                     }
                 }
             }
@@ -520,11 +556,11 @@ contract GameLogic is IGameLogic {
         
         console.log("_isRoundComplete Debug:");
         console.log("  Active Count:", activeCount);
-        console.log("  Matched Count:", matchedCount);
+        console.log("  Acted Count:", actedCount);
         console.log("  Current Turn:", gameState.currentTurn);
-        console.log("  All Players Matched:", activeCount == matchedCount);
+        console.log("  All Players Acted:", activeCount == actedCount);
         
-        return activeCount == matchedCount;
+        return activeCount == actedCount;
     }
     
     function _shouldShowdown() private view returns (bool) {

@@ -285,6 +285,18 @@ describe("GameLogic - Player Order", function () {
 
             // Verify flop round started
             let gameState = await stateStorage.getGameState();
+            console.log("\n--- Entering Flop Round ---");
+            console.log("Current Round:", gameState.currentRound);
+            console.log("Current Turn:", gameState.currentTurn);
+            console.log("Current Bet:", gameState.currentBet);
+
+            // Log player positions from state storage
+            console.log("\n--- State Storage Player Positions ---");
+            for (let i = 0; i < 5; i++) {
+                const addr = await stateStorage.getPlayerAtPosition(i);
+                console.log(`Position ${i}:`, addr);
+            }
+
             expect(gameState.currentRound).to.equal(1); // Flop round
             expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts post-flop
             expect(gameState.currentBet).to.equal(0); // Bets reset
@@ -493,6 +505,14 @@ describe("GameLogic - Player Order", function () {
 
         // Test for a round where all players check
         it("Should allow all players to check in flop round when no bets are made", async function () {
+            // Log player positions and addresses
+            console.log("\n--- Player Positions ---");
+            console.log("BUTTON (0):", players[BUTTON].address);
+            console.log("SB (1):", players[SB].address);
+            console.log("BB (2):", players[BB].address);
+            console.log("UTG (3):", players[UTG].address);
+            console.log("MP (4):", players[MP].address);
+
             // Complete pre-flop round first
             console.log("\n--- Pre-flop Round ---");
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);

@@ -334,10 +334,18 @@ contract GameLogic is IGameLogic {
     
     function _processFold(address player) private {
         IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
+        IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        
+        console.log("Processing fold for player at position", playerState.position);
+        console.log("Player's current bet:", playerState.currentBet);
+        console.log("Current main pot:", gameState.mainPot);
+        
+        // Update player status to folded but keep their currentBet and stack unchanged
         playerState.status = IStateStorage.PlayerStatus.Folded;
         stateStorage.updatePlayerState(player, playerState);
         
         uint8 activeCount = _getActivePlayerCount();
+        console.log("Active players remaining:", activeCount);
         
         if (activeCount == 1) {
             _awardPotToLastPlayer();
@@ -596,7 +604,12 @@ contract GameLogic is IGameLogic {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         IStateStorage.Player memory winnerState = stateStorage.getPlayer(winner);
         
+        console.log("In _awardPot - Pot size:", gameState.mainPot);
+        console.log("Winner's stack before:", winnerState.stack);
+        
         winnerState.stack += gameState.mainPot;
+        console.log("Winner's stack after:", winnerState.stack);
+        
         stateStorage.updatePlayerState(winner, winnerState);
         
         gameState.mainPot = 0;
@@ -607,6 +620,9 @@ contract GameLogic is IGameLogic {
         address lastPlayer;
         uint8 activePlayers = 0;
         
+        console.log("Starting _awardPotToLastPlayer");
+        
+        // Find the last active player
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
@@ -614,12 +630,34 @@ contract GameLogic is IGameLogic {
                 if (player.status == IStateStorage.PlayerStatus.Active) {
                     lastPlayer = playerAddress;
                     activePlayers++;
+                    console.log("Found active player at position", i);
                 }
             }
         }
         
         require(activePlayers == 1, "More than one player active");
+        
+        // Get the current pot from game state
+        IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        console.log("Current pot to award:", gameState.mainPot);
+        
+        // Award the pot
+        console.log("Awarding pot to last player at address:", lastPlayer);
         _awardPot(lastPlayer);
+        
+        // Reset all players' currentBet to 0 after pot is awarded
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddress = stateStorage.getPlayerAtPosition(i);
+            if (playerAddress != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
+                if (player.currentBet > 0) {
+                    console.log("Resetting currentBet for player at position", i);
+                    player.currentBet = 0;
+                    stateStorage.updatePlayerState(playerAddress, player);
+                }
+            }
+        }
+        
         _resetGameState();
         emit RoundComplete(IStateStorage.BettingRound.PreFlop);
     }
@@ -649,11 +687,26 @@ contract GameLogic is IGameLogic {
     // New helper function to reset the game state for a new hand
     function _resetGameState() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
+        
+        // Only reset game-level state
         gameState.currentRound = IStateStorage.BettingRound.PreFlop;
         gameState.currentBet = 0;
         gameState.mainPot = 0;
         gameState.lastRaise = 0;
         gameState.currentTurn = _getNextActivePlayer(address(0));
+        
         stateStorage.updateGameState(gameState);
+        
+        // Reset only currentBet for all players, keeping their stack changes
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddress = stateStorage.getPlayerAtPosition(i);
+            if (playerAddress != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
+                if (player.currentBet > 0) {
+                    player.currentBet = 0;
+                    stateStorage.updatePlayerState(playerAddress, player);
+                }
+            }
+        }
     }
 }

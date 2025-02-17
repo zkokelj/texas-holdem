@@ -167,7 +167,7 @@ describe("GameLogic - Player Order", function () {
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[BB].address);
 
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             // Verify pre-flop round completion
             const finalGameState = await stateStorage.getGameState();
@@ -188,7 +188,7 @@ describe("GameLogic - Player Order", function () {
             for (let pos of [UTG, MP, BUTTON, SB]) {
                 await gameLogic.connect(players[pos]).processAction(players[pos].address, CALL, 0);
             }
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             // Advance to flop
             await gameLogic.nextRound();
@@ -225,7 +225,7 @@ describe("GameLogic - Player Order", function () {
             for (let pos of [UTG, MP, BUTTON, SB]) {
                 await gameLogic.connect(players[pos]).processAction(players[pos].address, CALL, 0);
             }
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             await gameLogic.nextRound();
 
@@ -235,7 +235,7 @@ describe("GameLogic - Player Order", function () {
             expect(currentTurn).to.equal(players[BB].address);
 
             // BB checks, should skip folded SB
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[UTG].address);
         });
@@ -252,7 +252,7 @@ describe("GameLogic - Player Order", function () {
             for (let pos of [UTG, MP, BUTTON, SB]) {
                 await gameLogic.connect(players[pos]).processAction(players[pos].address, CALL, 0);
             }
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             const finalState = await stateStorage.getGameState();
             expect(finalState.currentRound).to.equal(1); // 1 = Flop round
@@ -280,8 +280,8 @@ describe("GameLogic - Player Order", function () {
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[BB].address);
 
-            // BB checks to end pre-flop
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            // BB calls to end pre-flop
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             // Verify flop round started
             let gameState = await stateStorage.getGameState();
@@ -414,8 +414,8 @@ describe("GameLogic - Player Order", function () {
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[BB].address);
 
-            // BB checks to end pre-flop
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            // BB calls to end pre-flop
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             // Verify flop round started
             let gameState = await stateStorage.getGameState();
@@ -459,6 +459,104 @@ describe("GameLogic - Player Order", function () {
                 expect(playerStack).to.be.lte(INITIAL_STACK);
             }
         });
+
+        it("Should correctly distribute pot when all fold to one player in flop round", async function () {
+            // Calculate expected pot size: 
+            // SB posts 25, BB posts 50, UTG/MP/BTN call 50 each = 225 total
+            const expectedPotSize = BigInt(SMALL_BLIND + BIG_BLIND + (BIG_BLIND * 3));
+            console.log("\nExpected pot size:", expectedPotSize.toString());
+
+            // Store initial stacks
+            const initialStacks = await Promise.all(
+                [BUTTON, SB, BB, UTG, MP].map(async pos => {
+                    const stack = await stateStorage.getPlayer(players[pos].address).then((p: { stack: bigint }) => p.stack);
+                    console.log(`Initial stack for position ${pos}: ${stack.toString()}`);
+                    return stack;
+                })
+            );
+
+            // Pre-flop round - all players call to reach flop
+            let currentTurn = (await stateStorage.getGameState()).currentTurn;
+            expect(currentTurn).to.equal(players[UTG].address);
+
+            // All players call pre-flop
+            for (let pos of [UTG, MP, BUTTON]) {
+                await gameLogic.connect(players[pos]).processAction(players[pos].address, CALL, 0);
+                const stack = await stateStorage.getPlayer(players[pos].address).then((p: { stack: bigint }) => p.stack);
+                console.log(`After ${pos} calls, their stack: ${stack.toString()}`);
+            }
+
+            // SB completes the call
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
+            console.log("After SB calls, their stack:",
+                (await stateStorage.getPlayer(players[SB].address).then((p: { stack: bigint }) => p.stack)).toString());
+
+            // BB calls to end pre-flop
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+            console.log("After BB calls, their stack:",
+                (await stateStorage.getPlayer(players[BB].address).then((p: { stack: bigint }) => p.stack)).toString());
+
+            // Verify flop round started with correct pot size
+            let gameState = await stateStorage.getGameState();
+            console.log("\nPot size at start of flop:", gameState.mainPot.toString());
+            expect(gameState.mainPot).to.equal(expectedPotSize);
+
+            // Store BUTTON's stack before winning
+            const buttonStackBeforeWin = await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: bigint }) => p.stack);
+            console.log("\nBUTTON stack before others fold:", buttonStackBeforeWin.toString());
+
+            // Everyone folds to BUTTON
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, FOLD, 0);
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
+
+            // Verify BUTTON won exactly the pot amount
+            const buttonFinalStack = await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: bigint }) => p.stack);
+            console.log("\nBUTTON final stack:", buttonFinalStack.toString());
+            console.log("Expected BUTTON stack:", (buttonStackBeforeWin + expectedPotSize).toString());
+            expect(buttonFinalStack).to.equal(buttonStackBeforeWin + expectedPotSize);
+
+            // Verify each player lost exactly their contributed amount
+            const expectedLosses = [
+                BigInt(BIG_BLIND),      // BUTTON called BB
+                BigInt(BIG_BLIND - SMALL_BLIND),  // SB only needs to complete to BB (25 more, already posted 25)
+                BigInt(0),      // BB only posted BB initially, no additional call needed
+                BigInt(BIG_BLIND),      // UTG called BB
+                BigInt(BIG_BLIND)       // MP called BB
+            ];
+
+            const finalStacks = await Promise.all(
+                [BUTTON, SB, BB, UTG, MP].map(async pos => {
+                    const stack = await stateStorage.getPlayer(players[pos].address).then((p: { stack: bigint }) => p.stack);
+                    console.log(`\nFinal stack for position ${pos}: ${stack.toString()}`);
+                    console.log(`Expected stack for position ${pos}: ${(initialStacks[pos] - expectedLosses[pos]).toString()}`);
+                    return stack;
+                })
+            );
+
+            // Verify each player's stack changed by the expected amount
+            for (let i = 0; i < 5; i++) {
+                if (i === 0) { // BUTTON
+                    console.log(`\nVerifying BUTTON (${i}):`);
+                    console.log(`Initial: ${initialStacks[i].toString()}`);
+                    console.log(`Final: ${finalStacks[i].toString()}`);
+                    console.log(`Expected: ${(initialStacks[i] - BigInt(BIG_BLIND) + expectedPotSize).toString()}`);
+                    expect(finalStacks[i]).to.equal(initialStacks[i] - BigInt(BIG_BLIND) + expectedPotSize);
+                } else {
+                    console.log(`\nVerifying position ${i}:`);
+                    console.log(`Initial: ${initialStacks[i].toString()}`);
+                    console.log(`Final: ${finalStacks[i].toString()}`);
+                    console.log(`Expected: ${(initialStacks[i] - expectedLosses[i]).toString()}`);
+                    expect(finalStacks[i]).to.equal(initialStacks[i] - expectedLosses[i]);
+                }
+            }
+
+            // Verify pot is empty after distribution
+            gameState = await stateStorage.getGameState();
+            console.log("\nFinal pot size:", gameState.mainPot.toString());
+            expect(gameState.mainPot).to.equal(BigInt(0));
+        });
     });
 
     // Additional Game Flow Scenarios
@@ -498,13 +596,13 @@ describe("GameLogic - Player Order", function () {
             await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
             await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
-            // Move to flop round
+            // Verify flop round started
             let gameState = await stateStorage.getGameState();
             expect(gameState.currentRound).to.equal(1); // Flop round
-            expect(gameState.currentTurn).to.equal(players[SB].address);
-            expect(gameState.currentBet).to.equal(0); // No bets made yet
+            expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts post-flop
+            expect(gameState.currentBet).to.equal(0); // Bets reset
 
             // All players check in sequence
             // SB checks
@@ -633,10 +731,10 @@ describe("GameLogic - Player Order", function () {
             expect(currentTurn).to.equal(players[SB].address);
             await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
 
-            // BB checks
+            // BB calls
             currentTurn = (await stateStorage.getGameState()).currentTurn;
             expect(currentTurn).to.equal(players[BB].address);
-            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
 
             // Pre-Flop round ends, game should move to Flop
             let gameState = await stateStorage.getGameState();

@@ -467,13 +467,11 @@ describe("GameLogic - Player Order", function () {
             console.log("\nExpected pot size:", expectedPotSize.toString());
 
             // Store initial stacks
-            const initialStacks = await Promise.all(
-                [BUTTON, SB, BB, UTG, MP].map(async pos => {
-                    const stack = await stateStorage.getPlayer(players[pos].address).then((p: { stack: bigint }) => p.stack);
-                    console.log(`Initial stack for position ${pos}: ${stack.toString()}`);
-                    return stack;
-                })
-            );
+            const initialStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack),
+                mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
+            };
 
             // Pre-flop round - all players call to reach flop
             let currentTurn = (await stateStorage.getGameState()).currentTurn;
@@ -526,29 +524,32 @@ describe("GameLogic - Player Order", function () {
                 BigInt(BIG_BLIND)       // MP called BB
             ];
 
-            const finalStacks = await Promise.all(
-                [BUTTON, SB, BB, UTG, MP].map(async pos => {
-                    const stack = await stateStorage.getPlayer(players[pos].address).then((p: { stack: bigint }) => p.stack);
-                    console.log(`\nFinal stack for position ${pos}: ${stack.toString()}`);
-                    console.log(`Expected stack for position ${pos}: ${(initialStacks[pos] - expectedLosses[pos]).toString()}`);
-                    return stack;
-                })
-            );
+            const finalStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack),
+                mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
+            };
 
             // Verify each player's stack changed by the expected amount
             for (let i = 0; i < 5; i++) {
                 if (i === 0) { // BUTTON
                     console.log(`\nVerifying BUTTON (${i}):`);
-                    console.log(`Initial: ${initialStacks[i].toString()}`);
-                    console.log(`Final: ${finalStacks[i].toString()}`);
-                    console.log(`Expected: ${(initialStacks[i] - BigInt(BIG_BLIND) + expectedPotSize).toString()}`);
-                    expect(finalStacks[i]).to.equal(initialStacks[i] - BigInt(BIG_BLIND) + expectedPotSize);
-                } else {
-                    console.log(`\nVerifying position ${i}:`);
-                    console.log(`Initial: ${initialStacks[i].toString()}`);
-                    console.log(`Final: ${finalStacks[i].toString()}`);
-                    console.log(`Expected: ${(initialStacks[i] - expectedLosses[i]).toString()}`);
-                    expect(finalStacks[i]).to.equal(initialStacks[i] - expectedLosses[i]);
+                    console.log(`Initial: ${initialStacks.button}`);
+                    console.log(`Final: ${finalStacks.button}`);
+                    console.log(`Expected: ${(initialStacks.button - BigInt(BIG_BLIND) + expectedPotSize).toString()}`);
+                    expect(finalStacks.button).to.equal(initialStacks.button - BigInt(BIG_BLIND) + expectedPotSize);
+                } else if (i === 3) { // UTG
+                    console.log(`\nVerifying UTG (${i}):`);
+                    console.log(`Initial: ${initialStacks.utg}`);
+                    console.log(`Final: ${finalStacks.utg}`);
+                    console.log(`Expected: ${(initialStacks.utg - expectedLosses[i]).toString()}`);
+                    expect(finalStacks.utg).to.equal(initialStacks.utg - expectedLosses[i]);
+                } else if (i === 4) { // MP
+                    console.log(`\nVerifying MP (${i}):`);
+                    console.log(`Initial: ${initialStacks.mp}`);
+                    console.log(`Final: ${finalStacks.mp}`);
+                    console.log(`Expected: ${(initialStacks.mp - expectedLosses[i]).toString()}`);
+                    expect(finalStacks.mp).to.equal(initialStacks.mp - expectedLosses[i]);
                 }
             }
 
@@ -866,6 +867,153 @@ describe("GameLogic - Player Order", function () {
             gameState = await stateStorage.getGameState();
             expect(gameState.currentRound).to.equal(0); // Game resets to PreFlop
             expect(gameState.mainPot).to.equal(0); // Pot should be cleared
+        });
+    });
+
+    // Test three-player showdown with clear winner
+    describe("Three-Player Showdown", function () {
+        beforeEach(async function () {
+            // Initialize each player's state with specific hole cards
+            for (let i = 0; i < 5; i++) {
+                let currentBet = 0;
+                let stack = INITIAL_STACK;
+
+                if (i === SB) {
+                    currentBet = SMALL_BLIND;
+                    stack = INITIAL_STACK - SMALL_BLIND;
+                } else if (i === BB) {
+                    currentBet = BIG_BLIND;
+                    stack = INITIAL_STACK - BIG_BLIND;
+                }
+
+                // Assign specific hole cards to create a clear winner
+                let holeCards;
+                if (i === BUTTON) {
+                    // BUTTON gets Ace-King suited (strongest hand)
+                    holeCards = [51, 50]; // Ace of Spades, King of Spades
+                } else if (i === UTG) {
+                    // UTG gets Queen-Jack suited (second strongest)
+                    holeCards = [49, 48]; // Queen of Spades, Jack of Spades
+                } else if (i === MP) {
+                    // MP gets Ten-Nine suited (third strongest)
+                    holeCards = [47, 46]; // Ten of Spades, Nine of Spades
+                } else {
+                    // Other players get weaker cards
+                    holeCards = [i * 2, i * 2 + 1];
+                }
+
+                await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+                    stack: stack,
+                    status: 1, // Active
+                    currentBet: currentBet,
+                    position: i,
+                    holeCards: holeCards,
+                    lastActionTime: 0
+                });
+            }
+
+            // Initialize the game state for pre-flop round
+            await stateStorage.connect(owner).updateGameBasics(
+                0,              // PreFlop round
+                BIG_BLIND,      // Current pot size
+                BIG_BLIND,      // Current bet to call
+                players[UTG].address  // UTG starts the action pre-flop
+            );
+        });
+
+        it("should correctly determine winner and award pot in three-player showdown", async function () {
+            // Store initial stacks
+            const initialStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack),
+                mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
+            };
+
+            // Pre-flop round
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // MP calls
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            // BUTTON calls
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+            // SB folds
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
+            // BB checks
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+
+            // Flop round
+            // BB starts and bets 100
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, RAISE, 100);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // MP calls
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            // BUTTON raises to 300
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 300);
+            // BB folds
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // MP calls
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+
+            // Turn round
+            // UTG checks
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
+            // MP checks
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CHECK, 0);
+            // BUTTON bets 500
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 500);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // MP calls
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+
+            // River round
+            // UTG checks
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
+            // MP checks
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CHECK, 0);
+            // BUTTON bets 1000
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 1000);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // MP calls
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+
+            // Get final stacks
+            const finalStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack),
+                mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
+            };
+
+            // Calculate total pot size
+            const totalBets =
+                // Pre-flop: SB posts 25, BB posts 50, UTG/MP/BTN call 50 each = 225
+                (SMALL_BLIND + BIG_BLIND + (BIG_BLIND * 3)) +
+                // Flop first bet: BB bets 100, UTG/MP/BTN call = 400
+                (100 * 4) +
+                // Flop second bet: BUTTON raises to 300 (200 more), UTG/MP call = 600
+                (200 * 3) +
+                // Turn bet: BUTTON bets 500, UTG/MP call = 1500
+                (500 * 3) +
+                // River bet: BUTTON bets 1000, UTG/MP call = 3000
+                (1000 * 3);
+            // Total = 225 + 400 + 600 + 1500 + 3000 = 5725
+
+            // BUTTON (Ace-King) should win
+            expect(finalStacks.button).to.be.gt(initialStacks.button);
+            expect(finalStacks.utg).to.be.lt(initialStacks.utg);
+            expect(finalStacks.mp).to.be.lt(initialStacks.mp);
+
+            // Verify pot is empty after distribution
+            const gameState = await stateStorage.getGameState();
+            expect(gameState.mainPot).to.equal(0);
+
+            // Verify winner got the correct amount
+            const buttonProfit = finalStacks.button - initialStacks.button;
+            expect(buttonProfit).to.equal(4050); // Winner's profit is pot (6000) minus their own total contributions (1950)
         });
     });
 });

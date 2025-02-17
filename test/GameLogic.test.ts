@@ -285,18 +285,6 @@ describe("GameLogic - Player Order", function () {
 
             // Verify flop round started
             let gameState = await stateStorage.getGameState();
-            console.log("\n--- Entering Flop Round ---");
-            console.log("Current Round:", gameState.currentRound);
-            console.log("Current Turn:", gameState.currentTurn);
-            console.log("Current Bet:", gameState.currentBet);
-
-            // Log player positions from state storage
-            console.log("\n--- State Storage Player Positions ---");
-            for (let i = 0; i < 5; i++) {
-                const addr = await stateStorage.getPlayerAtPosition(i);
-                console.log(`Position ${i}:`, addr);
-            }
-
             expect(gameState.currentRound).to.equal(1); // Flop round
             expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts post-flop
             expect(gameState.currentBet).to.equal(0); // Bets reset
@@ -505,16 +493,7 @@ describe("GameLogic - Player Order", function () {
 
         // Test for a round where all players check
         it("Should allow all players to check in flop round when no bets are made", async function () {
-            // Log player positions and addresses
-            console.log("\n--- Player Positions ---");
-            console.log("BUTTON (0):", players[BUTTON].address);
-            console.log("SB (1):", players[SB].address);
-            console.log("BB (2):", players[BB].address);
-            console.log("UTG (3):", players[UTG].address);
-            console.log("MP (4):", players[MP].address);
-
             // Complete pre-flop round first
-            console.log("\n--- Pre-flop Round ---");
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
             await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
@@ -523,38 +502,29 @@ describe("GameLogic - Player Order", function () {
 
             // Move to flop round
             let gameState = await stateStorage.getGameState();
-            console.log("\n--- Entering Flop Round ---");
-            console.log("Current Round:", gameState.currentRound);
-            console.log("Current Turn:", gameState.currentTurn);
-            console.log("Current Bet:", gameState.currentBet);
             expect(gameState.currentRound).to.equal(1); // Flop round
             expect(gameState.currentTurn).to.equal(players[SB].address);
             expect(gameState.currentBet).to.equal(0); // No bets made yet
 
             // All players check in sequence
-            console.log("\n--- Flop Round Checks ---");
             // SB checks
             await gameLogic.connect(players[SB]).processAction(players[SB].address, CHECK, 0);
             gameState = await stateStorage.getGameState();
-            console.log("After SB check - Current Turn:", gameState.currentTurn);
             expect(gameState.currentTurn).to.equal(players[BB].address);
 
             // BB checks
             await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
             gameState = await stateStorage.getGameState();
-            console.log("After BB check - Current Turn:", gameState.currentTurn);
             expect(gameState.currentTurn).to.equal(players[UTG].address);
 
             // UTG checks
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
             gameState = await stateStorage.getGameState();
-            console.log("After UTG check - Current Turn:", gameState.currentTurn);
             expect(gameState.currentTurn).to.equal(players[MP].address);
 
             // MP checks
             await gameLogic.connect(players[MP]).processAction(players[MP].address, CHECK, 0);
             gameState = await stateStorage.getGameState();
-            console.log("After MP check - Current Turn:", gameState.currentTurn);
             expect(gameState.currentTurn).to.equal(players[BUTTON].address);
 
             // BTN checks
@@ -562,10 +532,6 @@ describe("GameLogic - Player Order", function () {
 
             // Verify round progressed to Turn
             gameState = await stateStorage.getGameState();
-            console.log("\n--- After All Checks ---");
-            console.log("Current Round:", gameState.currentRound);
-            console.log("Current Bet:", gameState.currentBet);
-            console.log("Current Turn:", gameState.currentTurn);
             expect(gameState.currentRound).to.equal(2); // Turn round
             expect(gameState.currentBet).to.equal(0); // Still no bets
             expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts turn round

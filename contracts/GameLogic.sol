@@ -260,7 +260,6 @@ contract GameLogic is IGameLogic {
         
         require(gameState.currentRound < IStateStorage.BettingRound.River, "Hand complete");
 
-        console.log("Resetting player bets");
         // Reset all players' current bets and action tracking
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddr = stateStorage.getPlayerAtPosition(i);
@@ -273,7 +272,6 @@ contract GameLogic is IGameLogic {
                 }
             }
         }
-        console.log("Resetting player bets done");
         
         // Reset betting state for new round
         gameState.currentBet = 0;
@@ -291,12 +289,8 @@ contract GameLogic is IGameLogic {
             gameState.currentTurn = _getNextActivePlayer(address(0));
         }
         
-        console.log("\n--- Moving to Next Round ---");
-        console.log("Current Round:", uint256(gameState.currentRound));
-        
         uint8[] memory newCards;
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
-            console.log("Dealing Flop");
             newCards = handManager.dealFlop();
             gameState.communityCards[0] = newCards[0];
             gameState.communityCards[1] = newCards[1];
@@ -304,22 +298,15 @@ contract GameLogic is IGameLogic {
             gameState.currentRound = IStateStorage.BettingRound.Flop;
         }
         else if (gameState.currentRound == IStateStorage.BettingRound.Flop) {
-            console.log("Dealing Turn");
             newCards = handManager.dealTurn();
             gameState.communityCards[3] = newCards[0];
             gameState.currentRound = IStateStorage.BettingRound.Turn;
         }
         else if (gameState.currentRound == IStateStorage.BettingRound.Turn) {
-            console.log("Dealing River");
             newCards = handManager.dealRiver();
             gameState.communityCards[4] = newCards[0];
             gameState.currentRound = IStateStorage.BettingRound.River;
         }
-        
-        console.log("New Round State:");
-        console.log("  Round:", uint256(gameState.currentRound));
-        console.log("  Current Turn:", gameState.currentTurn);
-        console.log("  Current Bet:", gameState.currentBet);
         
         stateStorage.updateGameState(gameState);
         emit RoundStarted(gameState.currentRound);
@@ -362,12 +349,6 @@ contract GameLogic is IGameLogic {
     function _processCheck(address player) private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
-        
-        console.log("--- Processing Check ---");
-        console.log("Player: %s", player);
-        console.log("Current Round: %s", uint256(gameState.currentRound));
-        console.log("Current Bet: %s", gameState.currentBet);
-        console.log("Player's Current Bet: %s", playerState.currentBet);
         
         require(gameState.currentBet == 0 || playerState.currentBet == gameState.currentBet, 
             "Cannot check");
@@ -451,20 +432,15 @@ contract GameLogic is IGameLogic {
     }
     
     function _moveToNextPlayer() private {
-        console.log("\n--- Moving to Next Player ---");
-        
         if (_getActivePlayerCount() == 1) {
-            console.log("Only one active player - awarding pot");
             _awardPotToLastPlayer();
             return;
         }
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         bool roundComplete = _isRoundComplete();
-        console.log("Round Complete:", roundComplete);
         
         if (roundComplete) {
             bool shouldShowdown = _shouldShowdown();
-            console.log("Should Showdown:", shouldShowdown);
             
             if (shouldShowdown) {
                 _initiateShowdown();
@@ -474,7 +450,6 @@ contract GameLogic is IGameLogic {
         } else {
             address nextPlayer = _getNextActivePlayer(gameState.currentTurn);
             gameState.currentTurn = nextPlayer;
-            console.log("Next Player:", nextPlayer);
             
             stateStorage.updateGameState(gameState);
             emit ActionTimerStarted(nextPlayer, gameState.actionTimer, block.number);
@@ -519,11 +494,6 @@ contract GameLogic is IGameLogic {
     function _isRoundComplete() private view returns (bool) {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         
-        console.log("\n--- Checking Round Complete ---");
-        console.log("Current Round:", uint256(gameState.currentRound));
-        console.log("Current Turn:", gameState.currentTurn);
-        console.log("Current Bet:", gameState.currentBet);
-        
         // Special handling for pre-flop: BB must act
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
             address bbPlayer = stateStorage.getPlayerAtPosition(2); // BB is at position 2
@@ -532,7 +502,6 @@ contract GameLogic is IGameLogic {
                 if (bbPlayerState.currentBet == gameState.currentBet && 
                     bbPlayerState.status == IStateStorage.PlayerStatus.Active &&
                     !stateStorage.hasPlayerActedInRound(bbPlayer)) {
-                    console.log("BB hasn't acted yet - round not complete");
                     return false;
                 }
             }
@@ -542,23 +511,17 @@ contract GameLogic is IGameLogic {
         uint8 actedCount = 0;
         
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-            address playerAddress = stateStorage.getPlayerAtPosition(i);
-            if (playerAddress != address(0)) {
-                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
+            address playerAddr = stateStorage.getPlayerAtPosition(i);
+            if (playerAddr != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
                     activeCount++;
-                    if (stateStorage.hasPlayerActedInRound(playerAddress)) {
+                    if (stateStorage.hasPlayerActedInRound(playerAddr)) {
                         actedCount++;
                     }
                 }
             }
         }
-        
-        console.log("_isRoundComplete Debug:");
-        console.log("  Active Count:", activeCount);
-        console.log("  Acted Count:", actedCount);
-        console.log("  Current Turn:", gameState.currentTurn);
-        console.log("  All Players Acted:", activeCount == actedCount);
         
         return activeCount == actedCount;
     }
@@ -692,28 +655,5 @@ contract GameLogic is IGameLogic {
         gameState.lastRaise = 0;
         gameState.currentTurn = _getNextActivePlayer(address(0));
         stateStorage.updateGameState(gameState);
-    }
-
-    // Helper function to convert uint to string for logging
-    function uint2str(uint _i) internal pure returns (string memory _uintAsString) {
-        if (_i == 0) {
-            return "0";
-        }
-        uint j = _i;
-        uint len;
-        while (j != 0) {
-            len++;
-            j /= 10;
-        }
-        bytes memory bstr = new bytes(len);
-        uint k = len;
-        while (_i != 0) {
-            k = k-1;
-            uint8 temp = (48 + uint8(_i - _i / 10 * 10));
-            bytes1 b1 = bytes1(temp);
-            bstr[k] = b1;
-            _i /= 10;
-        }
-        return string(bstr);
     }
 }

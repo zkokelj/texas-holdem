@@ -634,6 +634,50 @@ describe("GameLogic - Player Order", function () {
             expect(gameState.currentBet).to.equal(0); // Still no bets
             expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts turn round
         });
+
+        // Test that players cannot check after a bet has been made
+        it("Should not allow check after a bet has been made in flop round", async function () {
+            // Complete pre-flop round first with all players calling
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, CALL, 0);
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+
+            // Verify flop round started
+            let gameState = await stateStorage.getGameState();
+            expect(gameState.currentRound).to.equal(1); // Flop round
+            expect(gameState.currentTurn).to.equal(players[SB].address); // SB starts post-flop
+            expect(gameState.currentBet).to.equal(0); // Bets reset
+
+            // SB makes a bet of 100
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, RAISE, 100);
+            gameState = await stateStorage.getGameState();
+            expect(gameState.currentBet).to.equal(100); // Verify bet is recorded
+            expect(gameState.currentTurn).to.equal(players[BB].address); // BB is next to act
+
+            // BB attempts to check - should revert
+            await expect(
+                gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0)
+            ).to.be.revertedWith("Cannot check");
+
+            // Verify BB's options
+            const validActions = await gameLogic.getValidActions(players[BB].address);
+            expect(validActions[CHECK]).to.be.false; // CHECK should not be valid
+            expect(validActions[CALL]).to.be.true;   // CALL should be valid
+            expect(validActions[RAISE]).to.be.true;  // RAISE should be valid
+            expect(validActions[FOLD]).to.be.true;   // FOLD should be valid
+
+            // BB can still make valid actions like calling
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CALL, 0);
+            gameState = await stateStorage.getGameState();
+            expect(gameState.currentTurn).to.equal(players[UTG].address);
+
+            // UTG also cannot check
+            await expect(
+                gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0)
+            ).to.be.revertedWith("Cannot check");
+        });
     });
 
     // Revert Scenarios

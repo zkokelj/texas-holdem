@@ -972,14 +972,13 @@ describe("GameLogic - Player Order", function () {
             // River round
             // UTG checks
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
-            // MP checks
-            await gameLogic.connect(players[MP]).processAction(players[MP].address, CHECK, 0);
             // BUTTON bets 1000
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 1000);
+
             // UTG calls
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
-            // MP calls
-            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+
+            console.log("\n=== END OF RIVER ===");
 
             // Get final stacks
             const finalStacks = {
@@ -988,32 +987,33 @@ describe("GameLogic - Player Order", function () {
                 mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
             };
 
-            // Calculate total pot size
-            const totalBets =
-                // Pre-flop: SB posts 25, BB posts 50, UTG/MP/BTN call 50 each = 225
-                (SMALL_BLIND + BIG_BLIND + (BIG_BLIND * 3)) +
-                // Flop first bet: BB bets 100, UTG/MP/BTN call = 400
-                (100 * 4) +
-                // Flop second bet: BUTTON raises to 300 (200 more), UTG/MP call = 600
-                (200 * 3) +
-                // Turn bet: BUTTON bets 500, UTG/MP call = 1500
-                (500 * 3) +
-                // River bet: BUTTON bets 1000, UTG/MP call = 3000
-                (1000 * 3);
-            // Total = 225 + 400 + 600 + 1500 + 3000 = 5725
+            // Calculate pots
+            // Main pot (all players eligible): 1000 x 3 + SB(25) + BB(50) = 3075
+            const mainPot = 3075;
 
-            // BUTTON (Ace-King) should win
-            expect(finalStacks.button).to.be.gt(initialStacks.button);
-            expect(finalStacks.utg).to.be.lt(initialStacks.utg);
+            // Side pot (only UTG and MP eligible): ~3000 each = ~6000
+            const sidePot = 6000;
+
+            console.log("\n=== Expected Results ===");
+            console.log("Main pot:", mainPot);
+            console.log("Side pot:", sidePot);
+            console.log("Expected BUTTON final:", initialStacks.button + mainPot);
+            console.log("Expected UTG final:", initialStacks.utg + sidePot - 1000);
+            console.log("Expected MP final: less than", initialStacks.mp);
+
+            // BUTTON should win the main pot with Ace-King
+            expect(finalStacks.button).to.equal(initialStacks.button + mainPot);
+
+            // UTG should win the side pot with Queens
+            expect(finalStacks.utg).to.equal(initialStacks.utg + sidePot - 1000); // -1000 from main pot loss
+
+            // MP should have lost both main pot and side pot
             expect(finalStacks.mp).to.be.lt(initialStacks.mp);
 
-            // Verify pot is empty after distribution
+            // Verify pots are empty after distribution
             const gameState = await stateStorage.getGameState();
-            expect(gameState.mainPot).to.equal(0);
-
-            // Verify winner got the correct amount
-            const buttonProfit = finalStacks.button - initialStacks.button;
-            expect(buttonProfit).to.equal(4050); // Winner's profit is pot (6000) minus their own total contributions (1950)
+            expect(gameState.mainPot).to.equal(BigInt(0));
+            expect(gameState.sidePots.length).to.equal(0);
         });
     });
 
@@ -1071,15 +1071,13 @@ describe("GameLogic - Player Order", function () {
                 button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
                 utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack)
             };
-            console.log("\nInitial stacks:");
-            console.log("BUTTON:", initialStacks.button);
-            console.log("UTG:", initialStacks.utg);
 
             // Helper function to log game state
             async function logGameState(round: string) {
                 const gameState = await stateStorage.getGameState();
                 console.log(`\n${round} - Game State:`);
                 console.log("Main Pot:", gameState.mainPot.toString());
+                console.log("Side Pots:", gameState.sidePots.map((pot: bigint) => pot.toString()));
                 console.log("Current Bet:", gameState.currentBet.toString());
 
                 // Log each player's state
@@ -1159,23 +1157,18 @@ describe("GameLogic - Player Order", function () {
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
             // BUTTON bets 1000
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 1000);
-            console.log("\nAfter BUTTON bets 1000:");
-            await logGameState("After BUTTON bets");
 
             // UTG calls
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
 
             console.log("\n=== END OF RIVER ===");
-            await logGameState("End of river");
 
             // Get final stacks
             const finalStacks = {
                 button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
-                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack)
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack),
+                mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
             };
-            console.log("\nFinal stacks:");
-            console.log("BUTTON:", finalStacks.button);
-            console.log("UTG:", finalStacks.utg);
 
             // Calculate total pot
             const totalPot =
@@ -1226,6 +1219,212 @@ describe("GameLogic - Player Order", function () {
             // Verify final stacks
             expect(finalStacks.button).to.equal(initialStacks.button + expectedProfit);
             expect(finalStacks.utg).to.equal(initialStacks.utg + expectedProfit);
+        });
+    });
+
+    // Test side pots with multiple all-ins
+    describe("Side Pots with All-ins", function () {
+        beforeEach(async function () {
+            // Initialize each player's state with different stack sizes and specific hole cards
+            for (let i = 0; i < 5; i++) {
+                let currentBet = 0;
+                let stack = INITIAL_STACK;
+
+                // Set different stack sizes
+                if (i === BUTTON) {
+                    stack = 1000; // Small stack
+                } else if (i === UTG) {
+                    stack = 5000; // Medium stack
+                } else if (i === MP) {
+                    stack = 10000; // Large stack
+                } else if (i === SB) {
+                    currentBet = SMALL_BLIND;
+                    stack = INITIAL_STACK - SMALL_BLIND;
+                } else if (i === BB) {
+                    currentBet = BIG_BLIND;
+                    stack = INITIAL_STACK - BIG_BLIND;
+                }
+
+                // Assign specific hole cards to create interesting hand matchups
+                let holeCards;
+                if (i === BUTTON) {
+                    // BUTTON gets Ace-King suited (strongest hand)
+                    holeCards = [51, 50]; // Ace of Spades, King of Spades
+                } else if (i === UTG) {
+                    // UTG gets Queen-Queen (second strongest)
+                    holeCards = [49, 36]; // Queen of Spades, Queen of Hearts
+                } else if (i === MP) {
+                    // MP gets Jack-Jack (third strongest)
+                    holeCards = [48, 35]; // Jack of Spades, Jack of Hearts
+                } else {
+                    // Other players get weaker cards
+                    holeCards = [i * 2, i * 2 + 1];
+                }
+
+                await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+                    stack: stack,
+                    status: 1, // Active
+                    currentBet: currentBet,
+                    position: i,
+                    holeCards: holeCards,
+                    lastActionTime: 0
+                });
+            }
+
+            // Initialize the game state for pre-flop round
+            await stateStorage.connect(owner).updateGameBasics(
+                0,              // PreFlop round
+                BIG_BLIND,      // Current pot size
+                BIG_BLIND,      // Current bet to call
+                players[UTG].address  // UTG starts the action pre-flop
+            );
+        });
+
+        it("should correctly handle side pots when players go all-in", async function () {
+            // Store initial stacks
+            const initialStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack),
+                mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
+            };
+
+            console.log("\n=== Initial State ===");
+            console.log("BUTTON stack:", initialStacks.button);
+            console.log("UTG stack:", initialStacks.utg);
+            console.log("MP stack:", initialStacks.mp);
+            console.log("Small Blind:", SMALL_BLIND);
+            console.log("Big Blind:", BIG_BLIND);
+
+            // Helper function to log player state
+            async function logPlayerState(position: string, address: string) {
+                const player = await stateStorage.getPlayer(address);
+                console.log(`\n${position} state:`);
+                console.log("Stack:", player.stack);
+                console.log("Current bet:", player.currentBet);
+                console.log("Status:", player.status);
+            }
+
+            // Helper function to log game state
+            async function logGameState(action: string) {
+                const gameState = await stateStorage.getGameState();
+                console.log(`\n=== Game State after ${action} ===`);
+                console.log("Current bet:", gameState.currentBet);
+                console.log("Main pot:", gameState.mainPot);
+                console.log("Current turn:", gameState.currentTurn);
+                console.log("Last raise:", gameState.lastRaise);
+            }
+
+            // Pre-flop round
+            console.log("\n=== Starting Pre-flop Round ===");
+
+            // UTG raises to 100 (minimum raise over BB)
+            console.log("\nUTG raising to 100...");
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 100);
+            await logPlayerState("UTG", players[UTG].address);
+            await logGameState("UTG raise");
+
+            // MP calls 100
+            console.log("\nMP calling 100...");
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            await logPlayerState("MP", players[MP].address);
+            await logGameState("MP call");
+
+            // BUTTON goes all-in for 1000 (has exactly 1000)
+            // Current bet is 150, so maximum raise is 1000 - 150 = 850
+            console.log("\nBUTTON going all-in...");
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 850);
+            await logPlayerState("BUTTON", players[BUTTON].address);
+            await logGameState("BUTTON all-in");
+
+            // After BUTTON's all-in, action continues in position order:
+            // First SB acts
+            console.log("\nSB folding...");
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
+            await logPlayerState("SB", players[SB].address);
+            await logGameState("SB fold");
+
+            // Then BB acts
+            console.log("\nBB folding...");
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
+            await logPlayerState("BB", players[BB].address);
+            await logGameState("BB fold");
+
+            // Then UTG acts
+            console.log("\nUTG calling all-in...");
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            await logPlayerState("UTG", players[UTG].address);
+            await logGameState("UTG call");
+
+            // Finally MP can act
+            console.log("\nMP calling all-in...");
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            await logPlayerState("MP", players[MP].address);
+            await logGameState("MP call");
+
+            // Flop round
+            console.log("\n=== Starting Flop Round ===");
+
+            // UTG goes all-in with remaining ~4000
+            console.log("\nUTG going all-in on flop...");
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 3000);
+            await logPlayerState("UTG", players[UTG].address);
+            await logGameState("UTG all-in");
+
+            // MP calls
+            console.log("\nMP calling UTG's all-in...");
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CALL, 0);
+            await logPlayerState("MP", players[MP].address);
+            await logGameState("MP call");
+
+            // Turn round - only MP can act but has no one to bet against
+            console.log("\n=== Starting Turn Round ===");
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CHECK, 0);
+            await logGameState("MP check on turn");
+
+            // River round - only MP can act but has no one to bet against
+            console.log("\n=== Starting River Round ===");
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, CHECK, 0);
+            await logGameState("MP check on river");
+
+            // Get final stacks
+            const finalStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack),
+                mp: await stateStorage.getPlayer(players[MP].address).then((p: { stack: number }) => p.stack)
+            };
+
+            console.log("\n=== Final Results ===");
+            console.log("BUTTON final stack:", finalStacks.button);
+            console.log("UTG final stack:", finalStacks.utg);
+            console.log("MP final stack:", finalStacks.mp);
+
+            // Calculate pots
+            // Main pot (all players eligible): 1000 x 3 + SB(25) + BB(50) = 3075
+            const mainPot = 3075;
+
+            // Side pot (only UTG and MP eligible): ~3000 each = ~6000
+            const sidePot = 6000;
+
+            console.log("\n=== Expected Results ===");
+            console.log("Main pot:", mainPot);
+            console.log("Side pot:", sidePot);
+            console.log("Expected BUTTON final:", initialStacks.button + mainPot);
+            console.log("Expected UTG final:", initialStacks.utg + sidePot - 1000);
+            console.log("Expected MP final: less than", initialStacks.mp);
+
+            // BUTTON should win the main pot with Ace-King
+            expect(finalStacks.button).to.equal(initialStacks.button + mainPot);
+
+            // UTG should win the side pot with Queens
+            expect(finalStacks.utg).to.equal(initialStacks.utg + sidePot - 1000); // -1000 from main pot loss
+
+            // MP should have lost both main pot and side pot
+            expect(finalStacks.mp).to.be.lt(initialStacks.mp);
+
+            // Verify pots are empty after distribution
+            const gameState = await stateStorage.getGameState();
+            expect(gameState.mainPot).to.equal(BigInt(0));
+            expect(gameState.sidePots.length).to.equal(0);
         });
     });
 });

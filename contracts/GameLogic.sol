@@ -426,22 +426,47 @@ contract GameLogic is IGameLogic {
         IStateStorage.Player memory playerState = stateStorage.getPlayer(player);
         IStateStorage.TournamentState memory tournament = stateStorage.getTournamentState();
         
+        console.log("\n=== Processing Raise ===");
+        console.log("Player position:", playerState.position);
+        console.log("Player stack:", playerState.stack);
+        console.log("Player current bet:", playerState.currentBet);
+        console.log("Raise amount:", raiseAmount);
+        console.log("Current game bet:", gameState.currentBet);
+        
         require(raiseAmount > 0, "Raise amount must be positive");
         
         uint256 toCall = gameState.currentBet > playerState.currentBet ? 
             gameState.currentBet - playerState.currentBet : 0;
         
+        console.log("Amount to call:", toCall);
+        
         require(raiseAmount <= type(uint256).max - toCall, "Raise amount too large");
         uint256 totalAmount = toCall + raiseAmount;
         
+        console.log("Total amount needed:", totalAmount);
+        
         uint256 minRaiseAmount = gameState.lastRaise > 0 ? gameState.lastRaise : tournament.bigBlind;
+        console.log("Minimum raise amount:", minRaiseAmount);
+        console.log("Last raise amount:", gameState.lastRaise);
+        console.log("Big blind:", tournament.bigBlind);
+        
         require(raiseAmount >= minRaiseAmount, "Raise too small");
+        
+        console.log("Checking if player has enough chips...");
+        console.log("Player stack:", playerState.stack);
+        console.log("Required total:", totalAmount);
+        
         require(playerState.stack >= totalAmount, "Not enough chips");
 
         if (totalAmount == playerState.stack) {
+            console.log("Player is going all-in");
             _processAllIn(player, totalAmount);
         } else {
             require(playerState.currentBet <= type(uint256).max - totalAmount, "Bet amount overflow");
+            
+            console.log("\nUpdating player state:");
+            console.log("Old stack:", playerState.stack);
+            console.log("Old current bet:", playerState.currentBet);
             
             playerState.stack -= totalAmount;
             playerState.currentBet += totalAmount;
@@ -450,6 +475,10 @@ contract GameLogic is IGameLogic {
             gameState.lastRaise = raiseAmount;
             gameState.lastActionAmount = totalAmount;
             gameState.lastAggressor = playerState.position;
+            
+            console.log("New stack:", playerState.stack);
+            console.log("New current bet:", playerState.currentBet);
+            console.log("New main pot:", gameState.mainPot);
             
             // Mark player as having acted
             stateStorage.setPlayerActedInRound(player, true);

@@ -288,9 +288,12 @@ contract GameLogic is IGameLogic {
             address playerAddr = stateStorage.getPlayerAtPosition(i);
             if (playerAddr != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
-                if (player.status == IStateStorage.PlayerStatus.Active) {
+                // Important: Add all bets to the pot before resetting
+                if (player.currentBet > 0) {
                     player.currentBet = 0;
                     stateStorage.updatePlayerState(playerAddr, player);
+                }
+                if (player.status == IStateStorage.PlayerStatus.Active) {
                     stateStorage.setPlayerActedInRound(playerAddr, false);
                 }
             }
@@ -362,10 +365,17 @@ contract GameLogic is IGameLogic {
         console.log("Processing fold for player at position", playerState.position);
         console.log("Player's current bet:", playerState.currentBet);
         console.log("Current main pot:", gameState.mainPot);
+
+        // Special case: if this is a blind that hasn't been added to pot yet
+        if (playerState.position == 1 && gameState.currentRound == IStateStorage.BettingRound.PreFlop) {  // SB position is 1
+            gameState.mainPot += playerState.currentBet;
+        }
+
+        playerState.currentBet = 0;
+        playerState.status = IStateStorage.PlayerStatus.Folded;        
         
-        // Update player status to folded but keep their currentBet and stack unchanged
-        playerState.status = IStateStorage.PlayerStatus.Folded;
         stateStorage.updatePlayerState(player, playerState);
+        stateStorage.updateGameState(gameState);
         
         uint8 activeCount = _getActivePlayerCount();
         console.log("Active players remaining:", activeCount);

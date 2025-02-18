@@ -1075,57 +1075,98 @@ describe("GameLogic - Player Order", function () {
             console.log("BUTTON:", initialStacks.button);
             console.log("UTG:", initialStacks.utg);
 
+            // Helper function to log game state
+            async function logGameState(round: string) {
+                const gameState = await stateStorage.getGameState();
+                console.log(`\n${round} - Game State:`);
+                console.log("Main Pot:", gameState.mainPot.toString());
+                console.log("Current Bet:", gameState.currentBet.toString());
+
+                // Log each player's state
+                for (let pos of [BUTTON, UTG, BB, SB]) {
+                    const player = await stateStorage.getPlayer(players[pos].address);
+                    console.log(`Player at position ${pos}:`);
+                    console.log("  Stack:", player.stack.toString());
+                    console.log("  Current Bet:", player.currentBet.toString());
+                    console.log("  Status:", player.status.toString());
+                }
+            }
+
             // Pre-flop round
+            console.log("\n=== PRE-FLOP ROUND ===");
+            await logGameState("Before pre-flop actions");
+
             // UTG calls
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            console.log("\nAfter UTG calls:");
+            await logGameState("After UTG calls");
+
             // MP folds
             await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
             // BUTTON calls
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+            console.log("\nAfter BUTTON calls:");
+            await logGameState("After BUTTON calls");
+
             // SB folds (already posted 25)
             await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
             // BB checks (already posted 50)
             await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
 
-            console.log("\nAfter pre-flop:");
-            console.log("BUTTON stack:", await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack));
-            console.log("UTG stack:", await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack));
+            console.log("\n=== END OF PRE-FLOP ===");
+            await logGameState("End of pre-flop");
 
             // Flop round
+            console.log("\n=== FLOP ROUND ===");
             // BB bets 100
             await gameLogic.connect(players[BB]).processAction(players[BB].address, RAISE, 100);
+            console.log("\nAfter BB bets 100:");
+            await logGameState("After BB bets");
+
             // UTG calls
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
             // BUTTON raises to 300
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 300);
+            console.log("\nAfter BUTTON raises to 300:");
+            await logGameState("After BUTTON raises");
+
             // BB folds
             await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
             // UTG calls
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
 
-            console.log("\nAfter flop:");
-            console.log("BUTTON stack:", await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack));
-            console.log("UTG stack:", await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack));
+            console.log("\n=== END OF FLOP ===");
+            await logGameState("End of flop");
 
             // Turn round
+            console.log("\n=== TURN ROUND ===");
             // UTG checks
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
             // BUTTON bets 500
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 500);
+            console.log("\nAfter BUTTON bets 500:");
+            await logGameState("After BUTTON bets");
+
             // UTG calls
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
 
-            console.log("\nAfter turn:");
-            console.log("BUTTON stack:", await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack));
-            console.log("UTG stack:", await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack));
+            console.log("\n=== END OF TURN ===");
+            await logGameState("End of turn");
 
             // River round
+            console.log("\n=== RIVER ROUND ===");
             // UTG checks
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
             // BUTTON bets 1000
             await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 1000);
+            console.log("\nAfter BUTTON bets 1000:");
+            await logGameState("After BUTTON bets");
+
             // UTG calls
             await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            console.log("\n=== END OF RIVER ===");
+            await logGameState("End of river");
 
             // Get final stacks
             const finalStacks = {
@@ -1146,7 +1187,13 @@ describe("GameLogic - Player Order", function () {
                 1000 +
                 // River: BTN(1000) + UTG(1000) = 2000
                 2000;
-            // Total pot = 3875
+
+            console.log("\nPot Calculation Breakdown:");
+            console.log("Pre-flop contributions:", 175);
+            console.log("Flop contributions:", 700);
+            console.log("Turn contributions:", 1000);
+            console.log("River contributions:", 2000);
+            console.log("Total pot calculated:", totalPot);
 
             // Calculate expected profit
             // Each player should get:
@@ -1157,8 +1204,12 @@ describe("GameLogic - Player Order", function () {
             // Calculate actual profits
             const buttonProfit = finalStacks.button - initialStacks.button;
             const utgProfit = finalStacks.utg - initialStacks.utg;
-            console.log("\nProfits:");
+            console.log("\nProfit Calculation:");
+            console.log("BUTTON initial stack:", initialStacks.button);
+            console.log("BUTTON final stack:", finalStacks.button);
             console.log("BUTTON profit:", buttonProfit);
+            console.log("UTG initial stack:", initialStacks.utg);
+            console.log("UTG final stack:", finalStacks.utg);
             console.log("UTG profit:", utgProfit);
             console.log("Expected profit:", expectedProfit);
             console.log("Dead money split calculation:", Math.floor(175 / 2));

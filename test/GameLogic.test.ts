@@ -1016,4 +1016,165 @@ describe("GameLogic - Player Order", function () {
             expect(buttonProfit).to.equal(4050); // Winner's profit is pot (6000) minus their own total contributions (1950)
         });
     });
+
+    // Test split pot between two players with equal hands
+    describe("Split Pot Showdown", function () {
+        beforeEach(async function () {
+            // Initialize each player's state with specific hole cards
+            for (let i = 0; i < 5; i++) {
+                let currentBet = 0;
+                let stack = INITIAL_STACK;
+
+                if (i === SB) {
+                    currentBet = SMALL_BLIND;
+                    stack = INITIAL_STACK - SMALL_BLIND;
+                } else if (i === BB) {
+                    currentBet = BIG_BLIND;
+                    stack = INITIAL_STACK - BIG_BLIND;
+                }
+
+                // Assign specific hole cards to create a split pot scenario
+                let holeCards;
+                if (i === BUTTON) {
+                    // BUTTON gets Ace-King suited in Spades
+                    holeCards = [51, 50]; // Ace of Spades, King of Spades
+                } else if (i === UTG) {
+                    // UTG gets Ace-King suited in Hearts
+                    holeCards = [38, 37]; // Ace of Hearts, King of Hearts
+                } else {
+                    // Other players get weaker cards
+                    holeCards = [i * 2, i * 2 + 1];
+                }
+
+                await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+                    stack: stack,
+                    status: 1, // Active
+                    currentBet: currentBet,
+                    position: i,
+                    holeCards: holeCards,
+                    lastActionTime: 0
+                });
+            }
+
+            // Initialize the game state for pre-flop round
+            await stateStorage.connect(owner).updateGameBasics(
+                0,              // PreFlop round
+                BIG_BLIND,      // Current pot size
+                BIG_BLIND,      // Current bet to call
+                players[UTG].address  // UTG starts the action pre-flop
+            );
+        });
+
+        it("should correctly split pot between two players with equal hands", async function () {
+            // Store initial stacks
+            const initialStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack)
+            };
+            console.log("\nInitial stacks:");
+            console.log("BUTTON:", initialStacks.button);
+            console.log("UTG:", initialStacks.utg);
+
+            // Pre-flop round
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // MP folds
+            await gameLogic.connect(players[MP]).processAction(players[MP].address, FOLD, 0);
+            // BUTTON calls
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, CALL, 0);
+            // SB folds (already posted 25)
+            await gameLogic.connect(players[SB]).processAction(players[SB].address, FOLD, 0);
+            // BB checks (already posted 50)
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, CHECK, 0);
+
+            console.log("\nAfter pre-flop:");
+            console.log("BUTTON stack:", await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack));
+            console.log("UTG stack:", await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack));
+
+            // Flop round
+            // BB bets 100
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, RAISE, 100);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+            // BUTTON raises to 300
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 300);
+            // BB folds
+            await gameLogic.connect(players[BB]).processAction(players[BB].address, FOLD, 0);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            console.log("\nAfter flop:");
+            console.log("BUTTON stack:", await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack));
+            console.log("UTG stack:", await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack));
+
+            // Turn round
+            // UTG checks
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
+            // BUTTON bets 500
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 500);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            console.log("\nAfter turn:");
+            console.log("BUTTON stack:", await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack));
+            console.log("UTG stack:", await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack));
+
+            // River round
+            // UTG checks
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CHECK, 0);
+            // BUTTON bets 1000
+            await gameLogic.connect(players[BUTTON]).processAction(players[BUTTON].address, RAISE, 1000);
+            // UTG calls
+            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, CALL, 0);
+
+            // Get final stacks
+            const finalStacks = {
+                button: await stateStorage.getPlayer(players[BUTTON].address).then((p: { stack: number }) => p.stack),
+                utg: await stateStorage.getPlayer(players[UTG].address).then((p: { stack: number }) => p.stack)
+            };
+            console.log("\nFinal stacks:");
+            console.log("BUTTON:", finalStacks.button);
+            console.log("UTG:", finalStacks.utg);
+
+            // Calculate total pot
+            const totalPot =
+                // Pre-flop: SB(25) + BB(50) + UTG(50) + BTN(50) = 175
+                175 +
+                // Flop: BB(100) + UTG(100 + 200) + BTN(300) = 700
+                700 +
+                // Turn: BTN(500) + UTG(500) = 1000
+                1000 +
+                // River: BTN(1000) + UTG(1000) = 2000
+                2000;
+            // Total pot = 3875
+
+            // Calculate expected profit
+            // Each player should get:
+            // 1. Their contribution back (1850)
+            // 2. Half of the dead money (175/2 = 87)
+            const expectedProfit = BigInt(87); // 175/2 with integer division = 87
+
+            // Calculate actual profits
+            const buttonProfit = finalStacks.button - initialStacks.button;
+            const utgProfit = finalStacks.utg - initialStacks.utg;
+            console.log("\nProfits:");
+            console.log("BUTTON profit:", buttonProfit);
+            console.log("UTG profit:", utgProfit);
+            console.log("Expected profit:", expectedProfit);
+            console.log("Dead money split calculation:", Math.floor(175 / 2));
+
+            // Verify profits
+            expect(buttonProfit).to.equal(expectedProfit);
+            expect(utgProfit).to.equal(expectedProfit);
+            expect(buttonProfit).to.equal(utgProfit);
+
+            // Verify pot is empty after distribution
+            const gameState = await stateStorage.getGameState();
+            expect(gameState.mainPot).to.equal(BigInt(0));
+
+            // Verify final stacks
+            expect(finalStacks.button).to.equal(initialStacks.button + expectedProfit);
+            expect(finalStacks.utg).to.equal(initialStacks.utg + expectedProfit);
+        });
+    });
 });

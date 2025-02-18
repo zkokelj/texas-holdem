@@ -149,11 +149,16 @@ contract GameLogic is IGameLogic {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         uint256 totalSidePots = stateStorage.sidePotCount();
         
+        console.log("Starting _awardPots");
+        console.log("Main pot size:", gameState.mainPot);
+        
         // Handle side pots
         for (uint256 i = 0; i < totalSidePots; i++) {
             (uint256 amount, bool isResolved) = stateStorage.getSidePot(i);
             if (!isResolved) {
+                console.log("Processing side pot", i, "amount:", amount);
                 address[] memory winners = _determineWinnerForPot(i);
+                console.log("Side pot winners found:", winners.length);
                 _awardPot(i, winners, amount);
                 stateStorage.setSidePotResolved(i);
             }
@@ -161,7 +166,9 @@ contract GameLogic is IGameLogic {
         
         // Handle main pot
         if (gameState.mainPot > 0) {
+            console.log("Processing main pot");
             address[] memory winners = _determineWinnerForPot(type(uint256).max);
+            console.log("Main pot winners found:", winners.length);
             _awardPot(type(uint256).max, winners, gameState.mainPot);
             gameState.mainPot = 0;
             stateStorage.updateGameState(gameState);
@@ -173,22 +180,35 @@ contract GameLogic is IGameLogic {
         uint8 winnerCount = 0;
         address[] memory potentialWinners = new address[](PokerConstants.MAX_PLAYERS);
         
+        console.log("\nDetermining winners for pot index:", potIndex == type(uint256).max ? 999999 : potIndex);
+        
         // Find all players with best hand
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddr = stateStorage.getPlayerAtPosition(i);
-            if (playerAddr != address(0) && stateStorage.isPlayerEligibleForPot(potIndex, playerAddr)) {
+            // For main pot, all active players are eligible. For side pots, check eligibility
+            bool isEligible = potIndex == type(uint256).max ? true : stateStorage.isPlayerEligibleForPot(potIndex, playerAddr);
+            if (playerAddr != address(0) && isEligible) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
-                    (uint32 rank, ) = handEvaluator.evaluateHoldemHand(
+                    console.log("\nEvaluating player at position:", i);
+                    console.log("Player address:", playerAddr);
+                    console.log("Player hole cards:", player.holeCards[0], player.holeCards[1]);
+                    
+                    (uint32 rank, uint8 handType) = handEvaluator.evaluateHoldemHand(
                         player.holeCards,
                         stateStorage.getGameState().communityCards
                     );
                     
+                    console.log("Player hand rank:", rank);
+                    console.log("Player hand type:", handType);
+                    
                     if (rank < bestRank) {
+                        console.log("New best rank found");
                         bestRank = rank;
                         winnerCount = 1;
                         potentialWinners[0] = playerAddr;
                     } else if (rank == bestRank) {
+                        console.log("Equal rank found - adding to winners");
                         potentialWinners[winnerCount] = playerAddr;
                         winnerCount++;
                     }
@@ -196,10 +216,13 @@ contract GameLogic is IGameLogic {
             }
         }
         
+        console.log("\nTotal winners found:", winnerCount);
+        
         // Return array of winners
         address[] memory winners = new address[](winnerCount);
         for (uint8 i = 0; i < winnerCount; i++) {
             winners[i] = potentialWinners[i];
+            console.log("Winner", i, "address:", winners[i]);
         }
         
         return winners;
@@ -548,72 +571,18 @@ contract GameLogic is IGameLogic {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
                     activeCount++;
+                    // Reveal hands as we count active players
+                    handManager.revealHand(playerAddress);
                 }
             }
         }
 
         require(activeCount > 0, "No active players for showdown");
         
-        // Create array of exact size needed
-        address[] memory activePlayers = new address[](activeCount);
-        uint8 activeIndex = 0;
-        
-        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-            address playerAddress = stateStorage.getPlayerAtPosition(i);
-            if (playerAddress != address(0)) {
-                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
-                if (player.status == IStateStorage.PlayerStatus.Active) {
-                    activePlayers[activeIndex] = playerAddress;
-                    activeIndex++;
-                    handManager.revealHand(playerAddress);
-                }
-            }
-        }
-        
-        require(activeIndex == activeCount, "Active player count mismatch");
-        
-        address winner = _determineWinner(activePlayers);
-        
-        _awardPot(winner);
+        // Use _awardPots which properly handles multiple winners
+        _awardPots();
         
         _resetGameState();
-    }
-    
-    function _determineWinner(address[] memory activePlayers) private view returns (address) {
-        require(activePlayers.length > 0, "No active players");
-        
-        address bestPlayer = activePlayers[0];
-        uint8[2] memory bestHoleCards = stateStorage.getPlayer(bestPlayer).holeCards;
-        uint8[5] memory communityCards = stateStorage.getGameState().communityCards;
-        (uint32 bestRank,) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
-        
-        for (uint i = 1; i < activePlayers.length; i++) {
-            uint8[2] memory currentHoleCards = stateStorage.getPlayer(activePlayers[i]).holeCards;
-            (uint32 currentRank,) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
-            
-            if (currentRank < bestRank) {
-                bestPlayer = activePlayers[i];
-                bestRank = currentRank;
-            }
-        }
-        
-        return bestPlayer;
-    }
-    
-    function _awardPot(address winner) private {
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        IStateStorage.Player memory winnerState = stateStorage.getPlayer(winner);
-        
-        console.log("In _awardPot - Pot size:", gameState.mainPot);
-        console.log("Winner's stack before:", winnerState.stack);
-        
-        winnerState.stack += gameState.mainPot;
-        console.log("Winner's stack after:", winnerState.stack);
-        
-        stateStorage.updatePlayerState(winner, winnerState);
-        
-        gameState.mainPot = 0;
-        stateStorage.updateGameState(gameState);
     }
     
     function _awardPotToLastPlayer() private {
@@ -641,9 +610,13 @@ contract GameLogic is IGameLogic {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         console.log("Current pot to award:", gameState.mainPot);
         
+        // Create winners array with single winner
+        address[] memory winners = new address[](1);
+        winners[0] = lastPlayer;
+        
         // Award the pot
         console.log("Awarding pot to last player at address:", lastPlayer);
-        _awardPot(lastPlayer);
+        _awardPot(type(uint256).max, winners, gameState.mainPot);
         
         // Reset all players' currentBet to 0 after pot is awarded
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {

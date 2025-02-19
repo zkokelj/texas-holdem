@@ -179,27 +179,27 @@ contract GameLogic is IGameLogic {
     }
 
     function _awardPots() private {
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        uint256 totalSidePots = stateStorage.sidePotCount();
-        
-        // Handle side pots
-        for (uint256 i = 0; i < totalSidePots; i++) {
-            (uint256 amount, bool isResolved) = stateStorage.getSidePot(i);
-            if (!isResolved) {
-                address[] memory winners = _determineWinnerForPot(i);
-                _awardPot(i, winners, amount);
-                stateStorage.setSidePotResolved(i);
-            }
-        }
-        
-        // Handle main pot
-        if (gameState.mainPot > 0) {
-            address[] memory winners = _determineWinnerForPot(type(uint256).max);
-            _awardPot(type(uint256).max, winners, gameState.mainPot);
-            gameState.mainPot = 0;
-            stateStorage.updateGameState(gameState);
+    IStateStorage.GameState memory gameState = stateStorage.getGameState();
+    uint256 totalSidePots = stateStorage.sidePotCount();
+    
+    // Handle side pots first
+    for (uint256 i = 0; i < totalSidePots; i++) {
+        (uint256 amount, bool isResolved) = stateStorage.getSidePot(i);
+        if (!isResolved) {
+            address[] memory winners = _determineWinnersForPot(i);
+            _awardPot(i, winners, amount);
+            stateStorage.setSidePotResolved(i);
         }
     }
+    
+    // Then handle main pot
+    if (gameState.mainPot > 0) {
+        address[] memory winners = _determineWinnersForPot(type(uint256).max);
+        _awardPot(type(uint256).max, winners, gameState.mainPot);
+        gameState.mainPot = 0;
+        stateStorage.updateGameState(gameState);
+    }
+}
 
     function _determineWinnerForPot(uint256 potIndex) private view returns (address[] memory) {
         uint32 bestRank = type(uint32).max;
@@ -582,7 +582,7 @@ contract GameLogic is IGameLogic {
     }
     
     function _initiateShowdown() private {
-        // Validate there are active players
+        // First count active players
         uint8 activeCount = _getActivePlayerCount();
         require(activeCount > 0, "No active players for showdown");
         
@@ -597,7 +597,7 @@ contract GameLogic is IGameLogic {
             }
         }
         
-        // Award all pots according to hand rankings
+        // Award all pots (main pot and side pots)
         _awardPots();
         
         // Reset game state for the next hand

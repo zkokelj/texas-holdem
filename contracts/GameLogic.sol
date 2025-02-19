@@ -178,9 +178,25 @@ contract GameLogic is IGameLogic {
         }
     }
 
-    function _awardPots() private {
+   function _awardPots() private {
     IStateStorage.GameState memory gameState = stateStorage.getGameState();
     uint256 totalSidePots = stateStorage.sidePotCount();
+    
+    // Debug logging
+    console.log("---- Pot Details ----");
+    console.log("Main pot: %s", gameState.mainPot);
+    uint256 totalPlayerBets = 0;
+    
+    // Calculate total player bets for verification
+    for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+        address playerAddr = stateStorage.getPlayerAtPosition(i);
+        if (playerAddr != address(0)) {
+            IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
+            console.log("Player at position %s bet: %s status: %s", i, player.currentBet, uint8(player.status));
+            totalPlayerBets += player.currentBet;
+        }
+    }
+    console.log("Total all player bets: %s", totalPlayerBets);
     
     // Handle side pots first
     for (uint256 i = 0; i < totalSidePots; i++) {
@@ -382,7 +398,8 @@ contract GameLogic is IGameLogic {
         console.log("Player's current bet:", playerState.currentBet);
         console.log("Current main pot:", gameState.mainPot);
         
-        // Update player status to folded but keep their currentBet and stack unchanged
+        // Update player status to folded but keep their currentBet unchanged
+        // Their bet is already in the pot from previous betting actions
         playerState.status = IStateStorage.PlayerStatus.Folded;
         stateStorage.updatePlayerState(player, playerState);
         

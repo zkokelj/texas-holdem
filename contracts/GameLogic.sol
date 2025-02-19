@@ -88,15 +88,38 @@ contract GameLogic is IGameLogic {
         require(playerState.status == IStateStorage.PlayerStatus.Active, "Player not active");
         require(amount == playerState.stack, "Must bet entire stack");
         
-        if (amount < gameState.currentBet - playerState.currentBet) {
-            // Create side pot only if all-in amount is less than current bet
-            _createSidePots(amount + playerState.currentBet);
+        uint256 callAmount = gameState.currentBet > playerState.currentBet ? 
+            gameState.currentBet - playerState.currentBet : 0;
+            
+        // If all-in is less than current bet, create side pots
+        if (amount < callAmount) {
+            _createSidePots(playerState.currentBet + amount);
         }
         
         // Update player state
-        playerState.currentBet += amount;
         playerState.stack = 0;
+        playerState.currentBet += amount;
         gameState.mainPot += amount;
+        
+        // Mark player as having acted
+        stateStorage.setPlayerActedInRound(player, true);
+        
+        // If all-in is a raise, reset action for others
+        if (playerState.currentBet > gameState.currentBet) {
+            gameState.currentBet = playerState.currentBet;
+            gameState.lastRaise = playerState.currentBet - gameState.currentBet;
+            
+            // Reset other players' action flags 
+            for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+                address otherPlayer = stateStorage.getPlayerAtPosition(i);
+                if (otherPlayer != address(0) && otherPlayer != player) {
+                    IStateStorage.Player memory otherPlayerState = stateStorage.getPlayer(otherPlayer);
+                    if (otherPlayerState.status == IStateStorage.PlayerStatus.Active) {
+                        stateStorage.setPlayerActedInRound(otherPlayer, false);
+                    }
+                }
+            }
+        }
         
         stateStorage.updatePlayerState(player, playerState);
         stateStorage.updateGameState(gameState);
@@ -107,12 +130,18 @@ contract GameLogic is IGameLogic {
     function _createSidePots(uint256 allInAmount) private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         uint256 sidePotAmount = 0;
+        address allInPlayer = address(0);
         
         // Calculate side pot from excess bets
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddr = stateStorage.getPlayerAtPosition(i);
             if (playerAddr != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
+                // Track the player who went all-in
+                if (player.currentBet == allInAmount && player.stack == 0) {
+                    allInPlayer = playerAddr;
+                }
+                
                 if (player.status == IStateStorage.PlayerStatus.Active && 
                     player.currentBet > allInAmount) {
                     sidePotAmount += (player.currentBet - allInAmount);
@@ -125,13 +154,17 @@ contract GameLogic is IGameLogic {
         if (sidePotAmount > 0) {
             uint256 newPotIndex = stateStorage.sidePotCount();
             
-            // Only track eligibility for active players with remaining stacks
+            // Set eligibility for all active players and the all-in player
             for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
                 address playerAddr = stateStorage.getPlayerAtPosition(i);
                 if (playerAddr != address(0)) {
                     IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
-                    if (player.status == IStateStorage.PlayerStatus.Active && 
-                        player.stack > 0) {
+                    // All-in player is eligible for their pot
+                    if (playerAddr == allInPlayer) {
+                        stateStorage.setPotEligibility(newPotIndex, playerAddr, true);
+                    }
+                    // Active players with remaining stack are eligible for side pot
+                    else if (player.status == IStateStorage.PlayerStatus.Active) {
                         stateStorage.setPotEligibility(newPotIndex, playerAddr, true);
                     }
                 }
@@ -222,11 +255,20 @@ contract GameLogic is IGameLogic {
         if (winners.length == 0) return;
         
         uint256 splitAmount = amount / winners.length;
+        uint256 remainder = amount % winners.length;
+        
         for (uint256 i = 0; i < winners.length; i++) {
             IStateStorage.Player memory winnerState = stateStorage.getPlayer(winners[i]);
-            winnerState.stack += splitAmount;
+            uint256 winnerAmount = splitAmount;
+            
+            // Give remainder to first player (standard poker practice)
+            if (i == 0) {
+                winnerAmount += remainder;
+            }
+            
+            winnerState.stack += winnerAmount;
             stateStorage.updatePlayerState(winners[i], winnerState);
-            emit PotAwarded(potIndex, winners[i], splitAmount);
+            emit PotAwarded(potIndex, winners[i], winnerAmount);
         }
     }
 
@@ -540,64 +582,68 @@ contract GameLogic is IGameLogic {
     }
     
     function _initiateShowdown() private {
-        // First count active players
-        uint8 activeCount = 0;
-        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-            address playerAddress = stateStorage.getPlayerAtPosition(i);
-            if (playerAddress != address(0)) {
-                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
-                if (player.status == IStateStorage.PlayerStatus.Active) {
-                    activeCount++;
-                }
-            }
-        }
-
+        // Validate there are active players
+        uint8 activeCount = _getActivePlayerCount();
         require(activeCount > 0, "No active players for showdown");
         
-        // Create array of exact size needed
-        address[] memory activePlayers = new address[](activeCount);
-        uint8 activeIndex = 0;
-        
+        // Reveal all active players' hands
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(playerAddress);
                 if (player.status == IStateStorage.PlayerStatus.Active) {
-                    activePlayers[activeIndex] = playerAddress;
-                    activeIndex++;
                     handManager.revealHand(playerAddress);
                 }
             }
         }
         
-        require(activeIndex == activeCount, "Active player count mismatch");
+        // Award all pots according to hand rankings
+        _awardPots();
         
-        address winner = _determineWinner(activePlayers);
-        
-        _awardPot(winner);
-        
+        // Reset game state for the next hand
         _resetGameState();
     }
-    
-    function _determineWinner(address[] memory activePlayers) private view returns (address) {
-        require(activePlayers.length > 0, "No active players");
+
+    function _determineWinnersForPot(uint256 potIndex) private view returns (address[] memory) {
+        uint32 bestRank = type(uint32).max;
+        uint8 winnerCount = 0;
+        address[] memory potentialWinners = new address[](PokerConstants.MAX_PLAYERS);
         
-        address bestPlayer = activePlayers[0];
-        uint8[2] memory bestHoleCards = stateStorage.getPlayer(bestPlayer).holeCards;
-        uint8[5] memory communityCards = stateStorage.getGameState().communityCards;
-        (uint32 bestRank,) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
-        
-        for (uint i = 1; i < activePlayers.length; i++) {
-            uint8[2] memory currentHoleCards = stateStorage.getPlayer(activePlayers[i]).holeCards;
-            (uint32 currentRank,) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
-            
-            if (currentRank < bestRank) {
-                bestPlayer = activePlayers[i];
-                bestRank = currentRank;
+        // Find all players with best hand
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddr = stateStorage.getPlayerAtPosition(i);
+            // For main pot (type(uint256).max), all active players are eligible
+            // For side pots, check eligibility
+            bool isEligible = potIndex == type(uint256).max ? true : 
+                            stateStorage.isPlayerEligibleForPot(potIndex, playerAddr);
+                            
+            if (playerAddr != address(0) && isEligible) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(playerAddr);
+                if (player.status == IStateStorage.PlayerStatus.Active) {
+                    (uint32 rank, ) = handEvaluator.evaluateHoldemHand(
+                        player.holeCards,
+                        stateStorage.getGameState().communityCards
+                    );
+                    
+                    if (rank < bestRank) {
+                        bestRank = rank;
+                        winnerCount = 1;
+                        potentialWinners[0] = playerAddr;
+                    } else if (rank == bestRank) {
+                        potentialWinners[winnerCount] = playerAddr;
+                        winnerCount++;
+                    }
+                }
             }
         }
         
-        return bestPlayer;
+        // Return array of winners with exact size
+        address[] memory winners = new address[](winnerCount);
+        for (uint8 i = 0; i < winnerCount; i++) {
+            winners[i] = potentialWinners[i];
+        }
+        
+        return winners;
     }
     
     function _awardPot(address winner) private {

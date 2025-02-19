@@ -205,8 +205,15 @@ contract GameLogic is IGameLogic {
         return winners;
     }
 
-    function _splitPot(uint256 potIndex, address player1, address player2) private {
-        (uint256 amount,) = stateStorage.getSidePot(potIndex);
+   function _splitPot(uint256 potIndex, address player1, address player2) private {
+        uint256 amount;
+        if (potIndex == type(uint256).max) {
+            amount = stateStorage.getGameState().mainPot;
+        } else {
+            (amount,) = stateStorage.getSidePot(potIndex);
+        }
+        
+        emit LogDebug(string(abi.encodePacked("Splitting pot of size: ", amount)));
         
         // Create winners array
         address[] memory winners = new address[](2);
@@ -214,7 +221,15 @@ contract GameLogic is IGameLogic {
         winners[1] = player2;
         
         _awardPot(potIndex, winners, amount);
-        stateStorage.setSidePotResolved(potIndex);
+        
+        if (potIndex != type(uint256).max) {
+            stateStorage.setSidePotResolved(potIndex);
+        } else {
+            // Make sure main pot is reset to zero
+            IStateStorage.GameState memory gameState = stateStorage.getGameState();
+            gameState.mainPot = 0;
+            stateStorage.updateGameState(gameState);
+        }
     }
 
 
@@ -572,13 +587,75 @@ contract GameLogic is IGameLogic {
         
         require(activeIndex == activeCount, "Active player count mismatch");
         
-        address winner = _determineWinner(activePlayers);
+        // Find the best hand and potential tied players
+        WinnerInfo memory winnerInfo = _findWinners(activePlayers);
         
-        _awardPot(winner);
+        // Award pot based on the winner information
+        if (winnerInfo.isTied) {
+            // Split pot between tied winners
+            _splitPot(type(uint256).max, winnerInfo.tiedWinners[0], winnerInfo.tiedWinners[1]);
+            emit LogDebug("Pot split between tied winners");
+        } else {
+            // Award pot to single winner
+            _awardPot(winnerInfo.singleWinner);
+            emit LogDebug("Pot awarded to single winner");
+        }
         
         _resetGameState();
     }
-    
+
+    function _findWinners(address[] memory activePlayers) private view returns (WinnerInfo memory) {
+        WinnerInfo memory winnerInfo;
+        winnerInfo.isTied = false;
+        
+        if (activePlayers.length == 0) {
+            return winnerInfo;
+        }
+        
+        address bestPlayer = activePlayers[0];
+        uint8[2] memory bestHoleCards = stateStorage.getPlayer(bestPlayer).holeCards;
+        uint8[5] memory communityCards = stateStorage.getGameState().communityCards;
+        (uint32 bestRank,) = handEvaluator.evaluateHoldemHand(bestHoleCards, communityCards);
+        
+        address[] memory tiedWinners = new address[](activePlayers.length);
+        uint8 tiedCount = 0;
+        
+        for (uint i = 1; i < activePlayers.length; i++) {
+            uint8[2] memory currentHoleCards = stateStorage.getPlayer(activePlayers[i]).holeCards;
+            (uint32 currentRank,) = handEvaluator.evaluateHoldemHand(currentHoleCards, communityCards);
+            
+            if (currentRank < bestRank) {
+                // Found a new best player
+                bestPlayer = activePlayers[i];
+                bestRank = currentRank;
+                tiedCount = 0; // Reset tied count
+            } else if (currentRank == bestRank) {
+                // Found a tied player
+                if (tiedCount == 0) {
+                    tiedWinners[0] = bestPlayer;
+                    tiedWinners[1] = activePlayers[i];
+                    tiedCount = 2;
+                } else {
+                    tiedWinners[tiedCount] = activePlayers[i];
+                    tiedCount++;
+                }
+            }
+        }
+        
+        if (tiedCount > 0) {
+            winnerInfo.isTied = true;
+            winnerInfo.tiedWinners = new address[](tiedCount);
+            for (uint8 i = 0; i < tiedCount; i++) {
+                winnerInfo.tiedWinners[i] = tiedWinners[i];
+            }
+        } else {
+            winnerInfo.singleWinner = bestPlayer;
+        }
+        
+        return winnerInfo;
+    }
+
+
     function _determineWinner(address[] memory activePlayers) private view returns (address) {
         require(activePlayers.length > 0, "No active players");
         

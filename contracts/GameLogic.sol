@@ -146,6 +146,8 @@ contract GameLogic is IGameLogic {
     }
 
     // ==================== ACTION PROCESSING FUNCTIONS ====================
+    // After each action, we need to update the game state and move to the next player
+
     /**
      * @dev Processes a fold action for a player
      * @param player The address of the player folding
@@ -198,7 +200,17 @@ contract GameLogic is IGameLogic {
             player
         );
 
+        // callAmount is the amount to call to get to the current bet
         uint256 callAmount = gameState.currentBet - playerState.currentBet;
+
+        // If calling would put them all-in we need to handle everything in the _processAllIn function
+        // TODO: Ziga - Make sure _processAllIn handles things the same way if triggered from call and from raise!
+        if (callAmount >= playerState.stack) {
+            _processAllIn(player, playerState.stack);
+            return;
+        }
+
+        // Now we handle the normal call logic (user has enough chips to call and doesn't go all-in with calling)
         require(playerState.stack >= callAmount, 'Not enough chips');
 
         playerState.stack -= callAmount;
@@ -235,10 +247,17 @@ contract GameLogic is IGameLogic {
         require(
             raiseAmount <= type(uint256).max - toCall,
             'Raise amount too large'
-        );
+        ); // prevent overflow
+
+        // total amount is the amount to call + the raise amount
         uint256 totalAmount = toCall + raiseAmount;
 
+        console.log('\tPlayer raising:', player);
+        console.log('\ttotalAmount', totalAmount);
+        console.log('\tplayerState.stack', playerState.stack);
+
         if (totalAmount == playerState.stack) {
+            console.log('\tPlayer going all-in');
             _processAllIn(player, totalAmount);
             return;
         }
@@ -257,6 +276,22 @@ contract GameLogic is IGameLogic {
         gameState.lastRaise = raiseAmount;
         gameState.lastActionAmount = totalAmount;
         gameState.lastAggressor = playerState.position;
+
+        // check if any players went all-in with lower amount than the raise amount here and trigger side pots creation
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddr = stateStorage.getPlayerAtPosition(i);
+            if (playerAddr != address(0)) {
+                IStateStorage.Player memory otherPlayer = stateStorage
+                    .getPlayer(playerAddr);
+                // If player is all-in (stack = 0) and bet less than current bet
+                if (
+                    otherPlayer.stack == 0 &&
+                    otherPlayer.currentBet < gameState.currentBet
+                ) {
+                    _createSidePots(otherPlayer.currentBet); // TODO: Ziga - Make sure this _createSidePots function is correct!
+                }
+            }
+        }
 
         stateStorage.setPlayerActedInRound(player, true);
 
@@ -296,11 +331,16 @@ contract GameLogic is IGameLogic {
         );
         require(amount == playerState.stack, 'Must bet entire stack');
 
+        // toCall is the amount to call to get to the current bet
         uint256 toCall = gameState.currentBet > playerState.currentBet
             ? gameState.currentBet - playerState.currentBet
             : 0;
 
+        // if we don't have enough to call, we need to create a side pot
         if (amount < toCall) {
+            console.log(
+                '\tPlayer going all-in - and side pot needed because they dont have enough to call'
+            );
             _createSidePots(playerState.currentBet + amount);
         }
 
@@ -310,6 +350,9 @@ contract GameLogic is IGameLogic {
 
         stateStorage.setPlayerActedInRound(player, true);
 
+        // If the player's current bet is greater than the game's current bet,
+        // update the game's last raise and current bet to reflect the player's bet.
+        // Then, reset the acted status for all other active players.
         if (playerState.currentBet > gameState.currentBet) {
             gameState.lastRaise = playerState.currentBet - gameState.currentBet;
             gameState.currentBet = playerState.currentBet;
@@ -332,7 +375,10 @@ contract GameLogic is IGameLogic {
         stateStorage.updatePlayerState(player, playerState);
         stateStorage.updateGameState(gameState);
 
+        // emit the event for the player going all-in
         emit PlayerAllIn(player, amount);
+
+        // move to the next player
         _moveToNextPlayer();
     }
 

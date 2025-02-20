@@ -100,7 +100,7 @@ describe("GameLogic - Simple Side Pot Test", function () {
     // Player B (small stack) goes all-in
     console.log("Player B (small stack) goes all-in");
     const playerBBeforeBet = await stateStorage.getPlayer(players[PLAYER_B].address);
-    await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CALL, 0);
+    await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, RAISE, 100);
     const playerBAfterBet = await stateStorage.getPlayer(players[PLAYER_B].address);
     
     // Verify Player B is all-in

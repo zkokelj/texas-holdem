@@ -368,4 +368,271 @@ describe("GameLogic - Pot Split Scenarios", function () {
             expect(finalStacks.utg).to.equal(initialStacks.utg + expectedProfitUTG);
         });
     });
+
+    describe("Pot Calculation Test", function () {
+        beforeEach(async function () {
+          // Initialize players with basic setup
+          for (let i = 0; i < 3; i++) {
+            await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+              stack: INITIAL_STACK,
+              status: 1, // Active
+              currentBet: 0,
+              position: i,
+              holeCards: [i * 2, i * 2 + 1], // Simple cards
+              lastActionTime: 0
+            });
+          }
+      
+          // Simple game state initialization
+          await stateStorage.connect(owner).updateGameBasics(
+            0,                // PreFlop round
+            0,                // Empty pot
+            0,                // No bet yet
+            players[0].address // First player to act
+          );
+        });
+      
+        it("should correctly track simple bets", async function () {
+            // Just one round of simple betting
+            console.log("----- SIMPLE BETTING TEST -----");
+            
+            // Start with empty pot
+            let initialPot = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Initial pot:", initialPot);
+          
+            // Player 0 bets 100
+            await gameLogic.connect(players[0]).processAction(players[0].address, RAISE, 100);
+            let potAfterBet1 = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after first bet (100):", potAfterBet1);
+            
+            // Player 1 calls 100
+            await gameLogic.connect(players[1]).processAction(players[1].address, CALL, 0);
+            let potAfterCall1 = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after first call (100):", potAfterCall1);
+            
+            // Check player bets BEFORE player 2 calls (which would trigger round transition)
+            console.log("Checking player bets before round completion:");
+            for (let i = 0; i < 2; i++) {
+              const playerBet = await stateStorage.getPlayer(players[i].address)
+                .then((p: { currentBet: bigint }) => p.currentBet); 
+              console.log(`Player ${i} bet:`, playerBet);
+              expect(playerBet).to.equal(BigInt(100));
+            }
+            
+            // Player 2 calls 100 - this will complete the round and trigger transition
+            await gameLogic.connect(players[2]).processAction(players[2].address, CALL, 0);
+            let potAfterCall2 = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after second call (100):", potAfterCall2);
+            
+            // Expected pot: 100 + 100 + 100 = 300
+            expect(potAfterCall2).to.equal(BigInt(300));
+          });
+      
+        it("should correctly transition between betting rounds", async function () {
+          console.log("----- ROUND TRANSITION TEST -----");
+          
+          // Round 1 - Simple betting
+          console.log("ROUND 1 - PreFlop");
+          let round1StartPot = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Starting pot:", round1StartPot);
+          
+          // Everyone bets 100
+          await gameLogic.connect(players[0]).processAction(players[0].address, RAISE, 100);
+          await gameLogic.connect(players[1]).processAction(players[1].address, CALL, 0);
+          await gameLogic.connect(players[2]).processAction(players[2].address, CALL, 0);
+          
+          let round1EndPot = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Pot after round 1 betting:", round1EndPot);
+          
+          // Check player bets before round transition
+          console.log("Player bets before transition:");
+          for (let i = 0; i < 3; i++) {
+            const playerBet = await stateStorage.getPlayer(players[i].address)
+              .then((p: { currentBet: bigint }) => p.currentBet);
+            console.log(`Player ${i} bet:`, playerBet);
+          }
+          
+          // Transition to round 2 - capture pot right after transition
+          console.log("TRANSITIONING TO ROUND 2");
+          await gameLogic.nextRound();
+          
+          let round2StartPot = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Pot after transition to round 2:", round2StartPot);
+          
+          // Verify pot didn't change during transition
+          expect(round2StartPot).to.equal(round1EndPot);
+          
+          // Check player bets were reset
+          console.log("Player bets after transition:");
+          for (let i = 0; i < 3; i++) {
+            const playerBet = await stateStorage.getPlayer(players[i].address)
+              .then((p: { currentBet: bigint }) => p.currentBet);
+            console.log(`Player ${i} bet:`, playerBet);
+            expect(playerBet).to.equal(BigInt(0));
+          }
+          
+          // Find who's first to act in round 2
+          const firstToAct = await stateStorage.getGameState()
+            .then((gs: { currentTurn: string }) => gs.currentTurn);
+          console.log("First to act in round 2:", firstToAct);
+          
+          // Continue with round 2 betting
+          console.log("ROUND 2 - Flop");
+          
+          // First player bets 200
+          await gameLogic.connect(await ethers.getSigner(firstToAct))
+            .processAction(firstToAct, RAISE, 200);
+          
+          // Find next player
+          const secondToAct = await stateStorage.getGameState()
+            .then((gs: { currentTurn: string }) => gs.currentTurn);
+          await gameLogic.connect(await ethers.getSigner(secondToAct))
+            .processAction(secondToAct, CALL, 0);
+          
+          // Find last player
+          const thirdToAct = await stateStorage.getGameState()
+            .then((gs: { currentTurn: string }) => gs.currentTurn);
+          await gameLogic.connect(await ethers.getSigner(thirdToAct))
+            .processAction(thirdToAct, CALL, 0);
+          
+          // Check final pot
+          let finalPot = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Final pot after round 2 betting:", finalPot);
+          
+          // Expected: 300 (round 1) + 600 (round 2) = 900
+          expect(finalPot).to.equal(BigInt(900));
+        });
+      
+        it("should track pot accurately when players fold", async function () {
+          console.log("----- FOLD TRACKING TEST -----");
+          
+          // Start with empty pot
+          let initialPot = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Initial pot:", initialPot);
+          
+          // Player 0 bets 100
+          await gameLogic.connect(players[0]).processAction(players[0].address, RAISE, 100);
+          let potAfterBet = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Pot after first bet (100):", potAfterBet);
+          
+          // Player 1 calls 100
+          await gameLogic.connect(players[1]).processAction(players[1].address, CALL, 0);
+          let potAfterCall = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Pot after call (100):", potAfterCall);
+          
+          // Player 2 folds (should not change pot)
+          await gameLogic.connect(players[2]).processAction(players[2].address, FOLD, 0);
+          let potAfterFold = await stateStorage.getGameState()
+            .then((gs: { mainPot: bigint }) => gs.mainPot);
+          console.log("Pot after fold:", potAfterFold);
+          
+          // Expected pot shouldn't change after fold: 100 + 100 = 200
+          expect(potAfterFold).to.equal(potAfterCall);
+          
+          // Check player statuses
+          const player2Status = await stateStorage.getPlayer(players[2].address)
+            .then((p: { status: number }) => p.status);
+          console.log("Folded player status:", player2Status);
+          expect(player2Status).to.equal(2); // Folded = 2
+        });
+
+        it("should correctly track full game sequence", async function () {
+            console.log("----- FULL GAME SEQUENCE TEST -----");
+            
+            // Track initial stacks
+            const initialStacks: bigint[] = [];
+            for (let i = 0; i < 3; i++) {
+              initialStacks[i] = await stateStorage.getPlayer(players[i].address)
+                .then((p: { stack: bigint }) => p.stack);
+            }
+            console.log("Initial stacks:", initialStacks);
+            
+            // PreFlop round
+            console.log("--- PREFLOP ---");
+            await gameLogic.connect(players[0]).processAction(players[0].address, RAISE, 100);
+            await gameLogic.connect(players[1]).processAction(players[1].address, CALL, 0);
+            await gameLogic.connect(players[2]).processAction(players[2].address, CALL, 0);
+            
+            let potAfterPreflop = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after preflop:", potAfterPreflop);
+            expect(potAfterPreflop).to.equal(BigInt(300));
+            
+            // Transition to Flop
+            console.log("--- TRANSITION TO FLOP ---");
+            await gameLogic.nextRound();
+            
+            let potAfterFlopTransition = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after transition to flop:", potAfterFlopTransition);
+            
+            // Flop betting - CORRECTED
+            console.log("--- FLOP BETTING ---");
+            // Find first player to act
+            const flopFirstToAct = await stateStorage.getGameState()
+              .then((gs: { currentTurn: string }) => gs.currentTurn);
+            
+            // First player bets 200
+            await gameLogic.connect(await ethers.getSigner(flopFirstToAct))
+              .processAction(flopFirstToAct, RAISE, 200);
+            let potAfterFirstBet = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after first flop bet:", potAfterFirstBet);
+            
+            // Second player calls 200 and raises 200 (400 total)
+            const secondToAct = await stateStorage.getGameState()
+              .then((gs: { currentTurn: string }) => gs.currentTurn);
+            await gameLogic.connect(await ethers.getSigner(secondToAct))
+              .processAction(secondToAct, RAISE, 200);
+            let potAfterSecondBet = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after second flop bet:", potAfterSecondBet);
+            
+            // Third player CALLS the current bet (400)
+            const thirdToAct = await stateStorage.getGameState()
+              .then((gs: { currentTurn: string }) => gs.currentTurn);
+            await gameLogic.connect(await ethers.getSigner(thirdToAct))
+              .processAction(thirdToAct, CALL, 0);
+            let potAfterThirdBet = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after third flop bet (call):", potAfterThirdBet);
+            
+            let potAfterFlop = await stateStorage.getGameState()
+              .then((gs: { mainPot: bigint }) => gs.mainPot);
+            console.log("Pot after flop betting:", potAfterFlop);
+            
+            // Expected pot: 300 (preflop) + 200 + 400 + 400 (flop) = 1300
+            expect(potAfterFlop).to.equal(BigInt(1300));
+            
+            // Get final stacks and verify correct deductions
+            const finalStacks: bigint[] = [];
+            // Expected player contributions:
+            // Player 0: 100 (preflop) + 400 (flop call) = 500
+            // Player 1: 100 (preflop) + 200 (flop raise) = 300
+            // Player 2: 100 (preflop) + 400 (flop call) = 500
+            const expectedDeductions = [BigInt(500), BigInt(300), BigInt(500)];
+            
+            for (let i = 0; i < 3; i++) {
+              finalStacks[i] = await stateStorage.getPlayer(players[i].address)
+                .then((p: { stack: bigint }) => p.stack);
+              console.log(`Player ${i} final stack:`, finalStacks[i]);
+              
+              // Each player should have lost their expected amount
+              expect(initialStacks[i] - finalStacks[i]).to.equal(expectedDeductions[i]);
+            }
+          });
+      
+        
+      });
 });

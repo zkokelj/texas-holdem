@@ -375,6 +375,15 @@ contract GameLogic is IGameLogic {
             'Hand complete'
         );
 
+        console.log(
+            'NEXT ROUND - Current pot before reset:',
+            gameState.mainPot
+        );
+        console.log(
+            'NEXT ROUND - Current round:',
+            uint8(gameState.currentRound)
+        );
+
         // Reset all players' current bets and action tracking
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddr = stateStorage.getPlayerAtPosition(i);
@@ -383,7 +392,16 @@ contract GameLogic is IGameLogic {
                     playerAddr
                 );
                 if (player.status == IStateStorage.PlayerStatus.Active) {
+                    console.log(
+                        'NEXT ROUND - Player %s bets before reset: %s',
+                        i,
+                        player.currentBet
+                    );
+
+                    // Important: we're resetting the currentBet but NOT refunding it
+                    // or changing the pot. The money is already in the pot.
                     player.currentBet = 0;
+
                     stateStorage.updatePlayerState(playerAddr, player);
                     stateStorage.setPlayerActedInRound(playerAddr, false);
                 }
@@ -422,6 +440,9 @@ contract GameLogic is IGameLogic {
             gameState.communityCards[4] = newCards[0];
             gameState.currentRound = IStateStorage.BettingRound.River;
         }
+
+        console.log('NEXT ROUND - Current pot after reset:', gameState.mainPot);
+        console.log('NEXT ROUND - New round:', uint8(gameState.currentRound));
 
         stateStorage.updateGameState(gameState);
         emit RoundStarted(gameState.currentRound);
@@ -522,6 +543,20 @@ contract GameLogic is IGameLogic {
         _moveToNextPlayer();
     }
 
+    function _calculateTotalPlayerBets() private view returns (uint256) {
+        uint256 total = 0;
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddr = stateStorage.getPlayerAtPosition(i);
+            if (playerAddr != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(
+                    playerAddr
+                );
+                total += player.currentBet;
+            }
+        }
+        return total;
+    }
+
     function _processRaise(address player, uint256 raiseAmount) private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         IStateStorage.Player memory playerState = stateStorage.getPlayer(
@@ -532,6 +567,7 @@ contract GameLogic is IGameLogic {
 
         require(raiseAmount > 0, 'Raise amount must be positive');
 
+        // Calculate the amount needed to call
         uint256 toCall = gameState.currentBet > playerState.currentBet
             ? gameState.currentBet - playerState.currentBet
             : 0;
@@ -556,13 +592,35 @@ contract GameLogic is IGameLogic {
                 'Bet amount overflow'
             );
 
+            // Log state before action
+            console.log('RAISE - Player position:', playerState.position);
+            console.log('RAISE - Player stack before:', playerState.stack);
+            console.log('RAISE - Current player bet:', playerState.currentBet);
+            console.log('RAISE - Table current bet:', gameState.currentBet);
+            console.log('RAISE - Amount to call:', toCall);
+            console.log('RAISE - Amount to raise:', raiseAmount);
+            console.log('RAISE - Total bet amount:', totalAmount);
+            console.log('RAISE - Current pot:', gameState.mainPot);
+
+            // Deduct from player's stack
             playerState.stack -= totalAmount;
-            playerState.currentBet += totalAmount;
+
+            // Add to the pot exactly the amount player is putting in this round
             gameState.mainPot += totalAmount;
+
+            // Set player's current bet to reflect their total bet for this round
+            playerState.currentBet = gameState.currentBet + raiseAmount;
+
+            // Update table bet
             gameState.currentBet = playerState.currentBet;
             gameState.lastRaise = raiseAmount;
             gameState.lastActionAmount = totalAmount;
             gameState.lastAggressor = playerState.position;
+
+            // Log state after action
+            console.log('RAISE - Player stack after:', playerState.stack);
+            console.log('RAISE - Player current bet:', playerState.currentBet);
+            console.log('RAISE - New pot:', gameState.mainPot);
 
             // Mark player as having acted
             stateStorage.setPlayerActedInRound(player, true);
@@ -603,6 +661,14 @@ contract GameLogic is IGameLogic {
             if (shouldShowdown) {
                 _initiateShowdown();
             } else {
+                console.log(
+                    'MOVING TO NEXT ROUND - Current pot:',
+                    gameState.mainPot
+                );
+                console.log(
+                    'MOVING TO NEXT ROUND - Total player bets:',
+                    _calculateTotalPlayerBets()
+                );
                 _nextRound();
             }
         } else {

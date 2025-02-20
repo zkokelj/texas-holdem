@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import 'hardhat/console.sol';
+
 contract HandEvaluator {
     uint8[52] public DECK;
     uint16[7462] public RANKS;
@@ -116,13 +118,14 @@ contract HandEvaluator {
         uint8[4] memory suitCounts;
         uint8 maxSuitCount = 0;
         uint8 maxSuit = 0;
-        // Changed rankProduct from uint32 to uint256 to avoid overflow.
         uint256 rankProduct = 1;
 
+        console.log('Evaluating hand with cards:');
         for (uint8 i = 0; i < 7; i++) {
             uint8 card = DECK[cards[i]];
             uint8 rank = card & 0x0F;
             uint8 suit = (card >> 4) & 0x03;
+            console.log('Card %d: Rank %d, Suit %d', i, rank, suit);
 
             rankBits |= (uint16(1) << rank);
             rankProduct *= PRIMES[rank];
@@ -134,7 +137,12 @@ contract HandEvaluator {
             }
         }
 
+        console.log('Rank bits: %d', rankBits);
+        console.log('Max suit count: %d for suit %d', maxSuitCount, maxSuit);
+
+        // Check for flush
         if (maxSuitCount >= 5) {
+            console.log('Potential flush detected');
             uint16 flushBits = 0;
             for (uint8 i = 0; i < 7; i++) {
                 uint8 card = DECK[cards[i]];
@@ -142,22 +150,29 @@ contract HandEvaluator {
                     flushBits |= (uint16(1) << (card & 0x0F));
                 }
             }
+            console.log('Flush bits: %d', flushBits);
 
+            // Check for straight flush
             for (uint8 i = 0; i < 10; i++) {
                 if ((flushBits & STRAIGHTS[i]) == STRAIGHTS[i]) {
+                    console.log('Straight flush found with index %d', i);
                     return (uint32(i + 1), i == 0 ? 10 : 9);
                 }
             }
 
+            console.log('Regular flush found');
             return (uint32(323 + findFlushRank(flushBits)), 6);
         }
 
+        // Check for straight
         for (uint8 i = 0; i < 10; i++) {
             if ((rankBits & STRAIGHTS[i]) == STRAIGHTS[i]) {
+                console.log('Straight found with index %d', i);
                 return (uint32(1600 + i), 5);
             }
         }
 
+        // Count ranks
         uint8[13] memory rankCounts;
         uint8 maxCount = 0;
         uint8 pairs = 0;
@@ -173,25 +188,42 @@ contract HandEvaluator {
             }
         }
 
+        console.log('Max count of any rank: %d', maxCount);
+        console.log('Number of pairs: %d', pairs);
+
+        // Print all rank counts
+        for (uint8 i = 0; i < 13; i++) {
+            if (rankCounts[i] > 0) {
+                console.log('Rank %d count: %d', i, rankCounts[i]);
+            }
+        }
+
         if (maxCount == 4) {
+            console.log('Four of a kind found');
             return (uint32(11 + findFourOfAKindRank(rankCounts)), 8);
         }
         if (maxCount == 3 && pairs >= 2) {
+            console.log('Full house found');
             return (uint32(167 + findFullHouseRank(rankCounts)), 7);
         }
         if (maxCount == 3) {
-            return (uint32(1610 + findThreeOfAKindRank(rankCounts)), 4);
+            console.log('Three of a kind found');
+            uint32 rank = uint32(1610 + findThreeOfAKindRank(rankCounts));
+            console.log('Three of a kind rank: %d', rank);
+            return (rank, 4);
         }
         if (pairs >= 2) {
+            console.log('Two pair found');
             return (uint32(2468 + findTwoPairRank(rankCounts)), 3);
         }
         if (pairs == 1) {
+            console.log('One pair found');
             return (uint32(3326 + findOnePairRank(rankCounts)), 2);
         }
 
+        console.log('High card');
         return (uint32(6186 + findHighCardRank(rankBits)), 1);
     }
-
     function findFlushRank(uint16 bits) private pure returns (uint32) {
         uint32 rank = 0;
         uint16 temp = bits;

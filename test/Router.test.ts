@@ -1,7 +1,7 @@
 // test/Router.test.ts
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { Signer } from "ethers";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import {
     StateStorage,
     HandManager,
@@ -11,6 +11,19 @@ import {
     Router
 } from "../typechain-types";
 
+// Constants for game state
+const INITIAL_STACK = 1000;
+const SMALL_BLIND = 10;
+const BIG_BLIND = 20;
+
+// Constants for actions
+const FOLD = 0;
+const CHECK = 1;
+const CALL = 2;
+const RAISE = 3;
+// For timer tests
+const RAISE_AMOUNT = 50;
+
 describe("Router", function () {
     let stateStorage: StateStorage;
     let handManager: HandManager;
@@ -18,19 +31,11 @@ describe("Router", function () {
     let gameLogic: GameLogic;
     let tournamentLogic: TournamentLogic;
     let router: Router;
-    let owner: Signer;
-    let admin: Signer;
-    let timerBackend: Signer;
-    let alice: Signer; // a sample player that we will whitelist
-    let bob: Signer;   // a sample account that remains non-whitelisted
-
-    // Constants for actions
-    const FOLD = 0;
-    const CHECK = 1;
-    const CALL = 2;
-    const RAISE = 3;
-    // For timer tests
-    const RAISE_AMOUNT = 50;
+    let owner: SignerWithAddress;
+    let admin: SignerWithAddress;
+    let timerBackend: SignerWithAddress;
+    let alice: SignerWithAddress; // a sample player that we will whitelist
+    let bob: SignerWithAddress;   // a sample account that remains non-whitelisted
 
     beforeEach(async function () {
         [owner, admin, timerBackend, alice, bob] = await ethers.getSigners();
@@ -77,6 +82,55 @@ describe("Router", function () {
 
         // Also, authorize timerBackend for timer functions.
         await router.connect(owner).addTimerBackend(await timerBackend.getAddress());
+
+        // Initialize each player's state
+        const players = [alice, bob, admin, timerBackend];
+        for (let i = 0; i < players.length; i++) {
+            const playerAddress = await players[i].getAddress();
+            await stateStorage.connect(owner).updatePlayerState(playerAddress, {
+                stack: INITIAL_STACK,
+                status: 1, // Active
+                currentBet: 0,
+                position: i,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
+            });
+        }
+
+        // Update player states for testing
+        const aliceAddress = await alice.getAddress();
+        await stateStorage.connect(owner).updatePlayerState(aliceAddress, {
+            stack: INITIAL_STACK,
+            status: 1,
+            currentBet: 0,
+            position: 0,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: 0  // Add totalContribution field
+        });
+
+        const bobAddress = await bob.getAddress();
+        await stateStorage.connect(owner).updatePlayerState(bobAddress, {
+            stack: INITIAL_STACK - SMALL_BLIND,
+            status: 1,
+            currentBet: SMALL_BLIND,
+            position: 1,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: SMALL_BLIND  // Add totalContribution field
+        });
+
+        const adminAddress = await admin.getAddress();
+        await stateStorage.connect(owner).updatePlayerState(adminAddress, {
+            stack: INITIAL_STACK - BIG_BLIND,
+            status: 1,
+            currentBet: BIG_BLIND,
+            position: 2,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: BIG_BLIND  // Add totalContribution field
+        });
     });
 
     describe("Whitelisting and Validity Checks", function () {
@@ -116,7 +170,8 @@ describe("Router", function () {
                 currentBet: 0,
                 position: 0,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0
             });
 
             // Set current turn to Alice
@@ -126,6 +181,36 @@ describe("Router", function () {
                 0, // currentBet
                 await alice.getAddress() // currentTurn
             );
+
+            // Initialize player state for testing
+            const playerState = {
+                stack: 1000,
+                status: 1, // Active
+                currentBet: 0,
+                position: 0,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: 0
+            };
+
+            await stateStorage.connect(owner).updatePlayerState(await alice.getAddress(), playerState);
+
+            // Initialize other player states
+            await stateStorage.connect(owner).updatePlayerState(await bob.getAddress(), {
+                ...playerState,
+                position: 1,
+                currentBet: SMALL_BLIND,
+                stack: INITIAL_STACK - SMALL_BLIND,
+                totalContribution: SMALL_BLIND
+            });
+
+            await stateStorage.connect(owner).updatePlayerState(await admin.getAddress(), {
+                ...playerState,
+                position: 2,
+                currentBet: BIG_BLIND,
+                stack: INITIAL_STACK - BIG_BLIND,
+                totalContribution: BIG_BLIND
+            });
         });
 
         it("Should route a valid game action (FOLD) from a whitelisted player", async function () {
@@ -198,7 +283,8 @@ describe("Router", function () {
                 currentBet: 0,
                 position: 0,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0
             });
 
             // Set Alice as current turn
@@ -208,6 +294,36 @@ describe("Router", function () {
                 0, // currentBet
                 await alice.getAddress() // currentTurn
             );
+
+            // Initialize player state for testing
+            const playerState = {
+                stack: 1000,
+                status: 1, // Active
+                currentBet: 0,
+                position: 0,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: 0
+            };
+
+            await stateStorage.connect(owner).updatePlayerState(await alice.getAddress(), playerState);
+
+            // Initialize other player states
+            await stateStorage.connect(owner).updatePlayerState(await bob.getAddress(), {
+                ...playerState,
+                position: 1,
+                currentBet: SMALL_BLIND,
+                stack: INITIAL_STACK - SMALL_BLIND,
+                totalContribution: SMALL_BLIND
+            });
+
+            await stateStorage.connect(owner).updatePlayerState(await admin.getAddress(), {
+                ...playerState,
+                position: 2,
+                currentBet: BIG_BLIND,
+                stack: INITIAL_STACK - BIG_BLIND,
+                totalContribution: BIG_BLIND
+            });
         });
 
         it("Should add and remove a timer backend and enforce only authorized timer can call routeBlindUpdate", async function () {
@@ -252,5 +368,41 @@ describe("Router", function () {
         it("Should revert getImplementation for invalid contract type", async function () {
             await expect(router.getImplementation(5)).to.be.revertedWith("Invalid contract type");
         });
+    });
+
+    it("Should update player state correctly", async function () {
+        const playerState = {
+            stack: 1000,
+            status: 1, // Active
+            currentBet: 0,
+            position: 0,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: 0
+        };
+
+        await stateStorage.connect(owner).updatePlayerState(await alice.getAddress(), playerState);
+
+        const savedState = await stateStorage.getPlayer(await alice.getAddress());
+        expect(savedState.stack).to.equal(1000);
+        expect(savedState.status).to.equal(1);
+        expect(savedState.position).to.equal(0);
+    });
+
+    it("Should maintain player position mapping", async function () {
+        const playerState = {
+            stack: 1000,
+            status: 1,
+            currentBet: 0,
+            position: 2,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: 0
+        };
+
+        await stateStorage.connect(owner).updatePlayerState(await alice.getAddress(), playerState);
+
+        const playerAtPosition = await stateStorage.getPlayerAtPosition(2);
+        expect(playerAtPosition).to.equal(await alice.getAddress());
     });
 });

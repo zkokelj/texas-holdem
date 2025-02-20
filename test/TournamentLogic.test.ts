@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Contract } from "ethers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("TournamentLogic", function () {
     let tournamentLogic: any;
@@ -29,6 +29,50 @@ describe("TournamentLogic", function () {
         // Authorize both TournamentLogic and owner
         await stateStorage.connect(owner).authorizeContract(tournamentLogic.getAddress());
         await stateStorage.connect(owner).authorizeContract(owner.address);
+
+        // Initialize each player's state
+        for (let i = 0; i < 5; i++) {
+            await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+                stack: INITIAL_STACK,
+                status: 1, // Active
+                currentBet: 0,
+                position: i,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
+            });
+        }
+
+        // Update player states for testing
+        await stateStorage.connect(owner).updatePlayerState(players[0].address, {
+            stack: INITIAL_STACK,
+            status: 1,
+            currentBet: 0,
+            position: 0,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: 0  // Add totalContribution field
+        });
+
+        await stateStorage.connect(owner).updatePlayerState(players[1].address, {
+            stack: INITIAL_STACK - INITIAL_SMALL_BLIND,
+            status: 1,
+            currentBet: INITIAL_SMALL_BLIND,
+            position: 1,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: INITIAL_SMALL_BLIND  // Add totalContribution field
+        });
+
+        await stateStorage.connect(owner).updatePlayerState(players[2].address, {
+            stack: INITIAL_STACK - INITIAL_BIG_BLIND,
+            status: 1,
+            currentBet: INITIAL_BIG_BLIND,
+            position: 2,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: INITIAL_BIG_BLIND  // Add totalContribution field
+        });
     });
 
     describe("Tournament Initialization", function () {
@@ -166,7 +210,8 @@ describe("TournamentLogic", function () {
                         currentBet: 0,
                         position: i,
                         holeCards: [0, 0],
-                        lastActionTime: 0
+                        lastActionTime: 0,
+                        totalContribution: 0
                     }
                 );
                 await tournamentLogic.connect(owner).processElimination(playerAddresses[i]);
@@ -191,7 +236,8 @@ describe("TournamentLogic", function () {
                     currentBet: 0,
                     position: 0,
                     holeCards: [0, 0],
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: 0
                 }
             );
 
@@ -286,7 +332,8 @@ describe("TournamentLogic", function () {
                         currentBet: 0,
                         position: i,
                         holeCards: [0, 0],
-                        lastActionTime: 0
+                        lastActionTime: 0,
+                        totalContribution: 0
                     }
                 );
                 await tournamentLogic.connect(owner).processElimination(playerAddresses[i]);

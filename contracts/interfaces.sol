@@ -6,7 +6,8 @@ interface IStateStorage {
         Inactive,
         Active,
         Folded,
-        Eliminated
+        Eliminated,
+        AllIn
     }
     enum TableState {
         Waiting,
@@ -33,6 +34,7 @@ interface IStateStorage {
         uint8 position;
         uint8[2] holeCards;
         uint256 lastActionTime;
+        uint256 totalContribution;
     }
 
     struct TournamentState {

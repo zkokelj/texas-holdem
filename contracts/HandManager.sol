@@ -162,8 +162,10 @@ contract HandManager {
 
         sbPlayerState.stack -= smallBlind;
         sbPlayerState.currentBet = smallBlind;
+        sbPlayerState.totalContribution += smallBlind;
         bbPlayerState.stack -= bigBlind;
         bbPlayerState.currentBet = bigBlind;
+        bbPlayerState.totalContribution += bigBlind;
 
         stateStorage.updatePlayerState(sbPlayer, sbPlayerState);
         stateStorage.updatePlayerState(bbPlayer, bbPlayerState);

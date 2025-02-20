@@ -35,6 +35,7 @@ contract StateStorage {
         uint8 position;
         uint8[2] holeCards;
         uint256 lastActionTime;
+        uint256 totalContribution;
     }
 
     struct TournamentState {
@@ -80,7 +81,8 @@ contract StateStorage {
         Inactive,
         Active,
         Folded,
-        Eliminated
+        Eliminated,
+        AllIn
     }
     enum TableState {
         Waiting,

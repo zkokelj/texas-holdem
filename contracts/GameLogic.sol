@@ -93,12 +93,12 @@ contract GameLogic is IGameLogic {
         );
         require(amount == playerState.stack, 'Must bet entire stack');
 
-        uint256 callAmount = gameState.currentBet > playerState.currentBet
+        uint256 toCall = gameState.currentBet > playerState.currentBet
             ? gameState.currentBet - playerState.currentBet
             : 0;
 
         // If all-in is less than current bet, create side pots
-        if (amount < callAmount) {
+        if (amount < toCall) {
             _createSidePots(playerState.currentBet + amount);
         }
 
@@ -112,10 +112,11 @@ contract GameLogic is IGameLogic {
 
         // If all-in is a raise, reset action for others
         if (playerState.currentBet > gameState.currentBet) {
-            gameState.currentBet = playerState.currentBet;
+            // Update game state's current bet and (optionally) the last raise
             gameState.lastRaise = playerState.currentBet - gameState.currentBet;
+            gameState.currentBet = playerState.currentBet;
 
-            // Reset other players' action flags
+            // Reset action flags for other active players
             for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
                 address otherPlayer = stateStorage.getPlayerAtPosition(i);
                 if (otherPlayer != address(0) && otherPlayer != player) {
@@ -135,6 +136,9 @@ contract GameLogic is IGameLogic {
         stateStorage.updateGameState(gameState);
 
         emit PlayerAllIn(player, amount);
+
+        // Move turn to the next active player after the all-in action.
+        _moveToNextPlayer();
     }
 
     function _createSidePots(uint256 allInAmount) private {
@@ -578,73 +582,60 @@ contract GameLogic is IGameLogic {
         );
         uint256 totalAmount = toCall + raiseAmount;
 
+        // If the player is going all-in, bypass the minimum raise check.
+        if (totalAmount == playerState.stack) {
+            _processAllIn(player, totalAmount);
+            return;
+        }
+
+        // For non-all-in raises, enforce the minimum raise.
         uint256 minRaiseAmount = gameState.lastRaise > 0
             ? gameState.lastRaise
             : tournament.bigBlind;
         require(raiseAmount >= minRaiseAmount, 'Raise too small');
         require(playerState.stack >= totalAmount, 'Not enough chips');
 
-        if (totalAmount == playerState.stack) {
-            _processAllIn(player, totalAmount);
-        } else {
-            require(
-                playerState.currentBet <= type(uint256).max - totalAmount,
-                'Bet amount overflow'
-            );
+        require(
+            playerState.currentBet <= type(uint256).max - totalAmount,
+            'Bet amount overflow'
+        );
 
-            // Log state before action
-            console.log('RAISE - Player position:', playerState.position);
-            console.log('RAISE - Player stack before:', playerState.stack);
-            console.log('RAISE - Current player bet:', playerState.currentBet);
-            console.log('RAISE - Table current bet:', gameState.currentBet);
-            console.log('RAISE - Amount to call:', toCall);
-            console.log('RAISE - Amount to raise:', raiseAmount);
-            console.log('RAISE - Total bet amount:', totalAmount);
-            console.log('RAISE - Current pot:', gameState.mainPot);
+        // Log state before action (omitted here for brevity)
 
-            // Deduct from player's stack
-            playerState.stack -= totalAmount;
+        // Deduct from player's stack and update state
+        playerState.stack -= totalAmount;
+        gameState.mainPot += totalAmount;
+        playerState.currentBet = gameState.currentBet + raiseAmount;
 
-            // Add to the pot exactly the amount player is putting in this round
-            gameState.mainPot += totalAmount;
+        // Update table bet
+        gameState.currentBet = playerState.currentBet;
+        gameState.lastRaise = raiseAmount;
+        gameState.lastActionAmount = totalAmount;
+        gameState.lastAggressor = playerState.position;
 
-            // Set player's current bet to reflect their total bet for this round
-            playerState.currentBet = gameState.currentBet + raiseAmount;
+        // Log state after action (omitted here for brevity)
 
-            // Update table bet
-            gameState.currentBet = playerState.currentBet;
-            gameState.lastRaise = raiseAmount;
-            gameState.lastActionAmount = totalAmount;
-            gameState.lastAggressor = playerState.position;
+        // Mark player as having acted
+        stateStorage.setPlayerActedInRound(player, true);
 
-            // Log state after action
-            console.log('RAISE - Player stack after:', playerState.stack);
-            console.log('RAISE - Player current bet:', playerState.currentBet);
-            console.log('RAISE - New pot:', gameState.mainPot);
-
-            // Mark player as having acted
-            stateStorage.setPlayerActedInRound(player, true);
-
-            // Reset other players' action flags since there's been a raise
-            for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-                address otherPlayer = stateStorage.getPlayerAtPosition(i);
-                if (otherPlayer != address(0) && otherPlayer != player) {
-                    IStateStorage.Player memory otherPlayerState = stateStorage
-                        .getPlayer(otherPlayer);
-                    if (
-                        otherPlayerState.status ==
-                        IStateStorage.PlayerStatus.Active
-                    ) {
-                        stateStorage.setPlayerActedInRound(otherPlayer, false);
-                    }
+        // Reset other players' action flags since there's been a raise
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address otherPlayer = stateStorage.getPlayerAtPosition(i);
+            if (otherPlayer != address(0) && otherPlayer != player) {
+                IStateStorage.Player memory otherPlayerState = stateStorage
+                    .getPlayer(otherPlayer);
+                if (
+                    otherPlayerState.status == IStateStorage.PlayerStatus.Active
+                ) {
+                    stateStorage.setPlayerActedInRound(otherPlayer, false);
                 }
             }
-
-            stateStorage.updatePlayerState(player, playerState);
-            stateStorage.updateGameState(gameState);
-
-            _moveToNextPlayer();
         }
+
+        stateStorage.updatePlayerState(player, playerState);
+        stateStorage.updateGameState(gameState);
+
+        _moveToNextPlayer();
     }
 
     function _moveToNextPlayer() private {

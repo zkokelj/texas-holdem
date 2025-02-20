@@ -635,4 +635,164 @@ describe("GameLogic - Pot Split Scenarios", function () {
       
         
       });
+
+
+      describe("GameLogic - Side Pots and All-In Scenarios", function () {
+        // Set up common deployment and state before each test
+        beforeEach(async function () {
+          // Deploy contracts and set up initial variables such as:
+          // - stateStorage
+          // - gameLogic
+          // - owner and players (using ethers.getSigners())
+          // - any constants (like INITIAL_STACK, RAISE, CALL, CHECK)
+        });
+      
+        it("should correctly handle side pots with all-in players", async function () {
+          console.log("----- ALL-IN AND SIDE POT TEST -----");
+          
+          // Set up players with different stack sizes
+          // Player 0: Normal stack
+          // Player 1: Small stack (will go all-in)
+          // Player 2: Normal stack
+          await stateStorage.connect(owner).updatePlayerState(players[0].address, {
+            stack: INITIAL_STACK,
+            status: 1, // Active
+            currentBet: 0,
+            position: 0,
+            holeCards: [50, 51], // Ace-King of spades (strongest hand)
+            lastActionTime: 0
+          });
+          
+          await stateStorage.connect(owner).updatePlayerState(players[1].address, {
+            stack: 300, // Small stack
+            status: 1, // Active
+            currentBet: 0,
+            position: 1,
+            holeCards: [48, 49], // Queen-Jack of spades (second strongest)
+            lastActionTime: 0
+          });
+          
+          await stateStorage.connect(owner).updatePlayerState(players[2].address, {
+            stack: INITIAL_STACK,
+            status: 1, // Active
+            currentBet: 0,
+            position: 2,
+            holeCards: [46, 47], // Ten-Nine of spades (third strongest)
+            lastActionTime: 0
+          });
+          
+          // Track initial stacks
+          const initialStacks = {
+            player0: (await stateStorage.getPlayer(players[0].address)).stack,
+            player1: (await stateStorage.getPlayer(players[1].address)).stack,
+            player2: (await stateStorage.getPlayer(players[2].address)).stack
+          };
+          console.log("Initial stacks:", initialStacks);
+          
+          // Set initial game state
+          await stateStorage.connect(owner).updateGameBasics(
+            0,                // PreFlop round
+            0,                // Empty pot
+            0,                // No bet yet
+            players[0].address // First player to act
+          );
+          
+          // Betting sequence:
+          console.log("--- BETTING SEQUENCE ---");
+          
+          // Player 0 bets 200
+          await gameLogic.connect(players[0]).processAction(players[0].address, RAISE, 200);
+          let potAfterBet1 = (await stateStorage.getGameState()).mainPot;
+          console.log("Pot after first bet (200):", potAfterBet1);
+          
+          // Player 1 goes all-in with 300 (by raising 100 on top of calling 200)
+          await gameLogic.connect(players[1]).processAction(players[1].address, RAISE, 100);
+          let potAfterAllIn = (await stateStorage.getGameState()).mainPot;
+          console.log("Pot after all-in (300 total):", potAfterAllIn);
+          
+          // Check player 1's status
+          const player1State = await stateStorage.getPlayer(players[1].address);
+          console.log("All-in player stack:", player1State.stack);
+          expect(player1State.stack).to.equal(BigInt(0)); // Confirm all-in
+          
+          // Player 2 raises to 500 (calls 300 + raises 200)
+          await gameLogic.connect(players[2]).processAction(players[2].address, RAISE, 200);
+          let potAfterRaise = (await stateStorage.getGameState()).mainPot;
+          console.log("Pot after raise (500 total):", potAfterRaise);
+          
+          // Player 0 calls 500
+          await gameLogic.connect(players[0]).processAction(players[0].address, CALL, 0);
+          let potAfterCall = (await stateStorage.getGameState()).mainPot;
+          console.log("Pot after call:", potAfterCall);
+          
+          // Check side pot creation
+          const sidePotsCount = await stateStorage.sidePotCount();
+          console.log("Number of side pots:", sidePotsCount);
+          expect(sidePotsCount).to.be.gt(BigInt(0));
+          
+          // Examine each side pot
+          for (let i = 0; i < Number(sidePotsCount); i++) {
+            const sidePot = await stateStorage.getSidePot(i);
+            console.log(`Side pot ${i}: Amount=${sidePot[0]}, Resolved=${sidePot[1]}`);
+          }
+          
+          // Check pot eligibility
+          for (let i = 0; i < 3; i++) {
+            const isEligible = await stateStorage.isPlayerEligibleForPot(0, players[i].address);
+            console.log(`Player ${i} eligible for side pot: ${isEligible}`);
+          }
+          
+          // Fast forward to showdown (skip additional rounds)
+          console.log("--- PROCEEDING TO SHOWDOWN ---");
+          
+          // Manually set community cards for a controlled test
+          const communityCards = [0, 1, 2, 3, 4]; // Example cards
+          await stateStorage.connect(owner).updateGameCards(communityCards);
+          
+          // Trigger showdown rounds (flop, turn, river)
+          await gameLogic.nextRound(); // To flop
+          await gameLogic.nextRound(); // To turn
+          await gameLogic.nextRound(); // To river
+          
+          // Force showdown by having remaining players check
+          // (Skip the all-in player)
+          for (let i = 0; i < 2; i++) {
+            const actingPlayer = (await stateStorage.getGameState()).currentTurn;
+            if (actingPlayer !== players[1].address) {
+              await gameLogic.connect(await ethers.getSigner(actingPlayer))
+                .processAction(actingPlayer, CHECK, 0);
+            }
+          }
+          
+          // Verify final stacks
+          const finalStacks = {
+            player0: (await stateStorage.getPlayer(players[0].address)).stack,
+            player1: (await stateStorage.getPlayer(players[1].address)).stack,
+            player2: (await stateStorage.getPlayer(players[2].address)).stack
+          };
+          console.log("Final stacks:", finalStacks);
+          
+          // Verify main pot is empty after distribution
+          const finalMainPot = (await stateStorage.getGameState()).mainPot;
+          expect(finalMainPot).to.equal(BigInt(0));
+          
+          // Verify side pots are resolved
+          for (let i = 0; i < Number(sidePotsCount); i++) {
+            const sidePot = await stateStorage.getSidePot(i);
+            expect(sidePot[1]).to.be.true; // isResolved should be true
+          }
+          
+          // Calculate expected profits and ensure they sum to zero
+          const player0Profit = finalStacks.player0 - initialStacks.player0;
+          const player1Profit = finalStacks.player1 - initialStacks.player1;
+          const player2Profit = finalStacks.player2 - initialStacks.player2;
+          
+          console.log("Profits/losses:");
+          console.log("Player 0:", player0Profit);
+          console.log("Player 1:", player1Profit);
+          console.log("Player 2:", player2Profit);
+          
+          expect(player0Profit + player1Profit + player2Profit).to.equal(BigInt(0));
+        });
+      });
 });

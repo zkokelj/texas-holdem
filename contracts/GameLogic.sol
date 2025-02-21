@@ -269,7 +269,7 @@ contract GameLogic is IGameLogic {
         if (totalAmount == playerState.stack) {
             console.log('\tPlayer going all-in from raise');
             playerState.status = IStateStorage.PlayerStatus.AllIn;
-            playerState.currentBet = gameState.currentBet;
+            playerState.currentBet = totalAmount;
             gameState.mainPot += playerState.stack;
             playerState.stack = 0;
             playerState.totalContribution += playerState.stack;

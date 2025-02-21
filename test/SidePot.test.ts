@@ -86,9 +86,9 @@ describe("GameLogic - Simple Side Pot Test", function () {
       players[PLAYER_A].address // Player A starts
     );
 
-    // Set community cards to be unique and lower value to avoid conflicts
-    // Using clubs (0-12), diamonds (13-25), hearts (26-38)
-    await stateStorage.connect(owner).updateGameCards([1, 14, 27, 2, 15]);
+    // Set community cards to give Player A three of a kind
+    // Using: 8♥, K♣, A♦, 4♠, 3♠
+    await stateStorage.connect(owner).updateGameCards([33, 12, 13, 43, 42]);
   }
 
   it("should correctly handle pot distribution with all-in player", async function () {
@@ -270,14 +270,14 @@ describe("GameLogic - Simple Side Pot Test", function () {
           let holeCards;
           
           if (i === PLAYER_A) {
-            // Player A: Aces (best hand overall - to win main pot)
-            holeCards = [0, 13]; // Ace of Clubs, Ace of Diamonds
+            // Player A: Pocket 8s for three of a kind with community cards
+            holeCards = [7, 20]; // 8♣, 8♦
           } else if (i === PLAYER_B) {
-            // Player B: Kings (second best hand - to win side pot)
-            holeCards = [12, 25]; // King of Clubs, King of Diamonds
+            // Player B: Pocket Jacks for a pair
+            holeCards = [10, 23]; // J♣, J♦
           } else if (i === PLAYER_C) {
-            // Player C: Queens (worst hand among those who don't fold)
-            holeCards = [11, 24]; // Queen of Clubs, Queen of Diamonds
+            // Player C: 2-7 offsuit (worst starting hand)
+            holeCards = [1, 19]; // 2♣, 7♦
           } else {
             // Players D and E: Random low cards (they will fold)
             holeCards = [i * 2, i * 2 + 1];
@@ -302,10 +302,9 @@ describe("GameLogic - Simple Side Pot Test", function () {
           players[PLAYER_A].address // Player A starts
         );
       
-        // VERY IMPORTANT: Set community cards with MIXED suits
-        // to avoid creating a flush for all players
-        // Using: 3♥, 7♣, 9♦, J♠, 4♠
-        await stateStorage.connect(owner).updateGameCards([29, 7, 22, 50, 43]);
+        // Set community cards to give Player A three of a kind
+        // Using: 8♥, K♣, A♦, 4♠, 3♠
+        await stateStorage.connect(owner).updateGameCards([33, 12, 13, 43, 42]);
       }
   
     it("should correctly handle pot distribution with multiple winners", async function () {

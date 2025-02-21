@@ -61,8 +61,11 @@ describe("GameLogic - Simple Side Pot Test", function () {
     for (let i = 0; i < 3; i++) {
       const stack = i === PLAYER_B ? SMALL_STACK : NORMAL_STACK;
       
-      // Set hole cards (values don't matter for this test)
-      const holeCards = [i * 2, i * 2 + 1];
+      // Set hole cards to be unique and high value to avoid conflicts
+      // Player A: [48,49] (Queen-King of Spades)
+      // Player B: [46,47] (Ten-Jack of Spades)
+      // Player C: [44,45] (Eight-Nine of Spades)
+      const holeCards = [44 + (i * 2), 45 + (i * 2)];
       
       await stateStorage.connect(owner).updatePlayerState(players[i].address, {
         stack: stack,
@@ -82,6 +85,10 @@ describe("GameLogic - Simple Side Pot Test", function () {
       0, // No bet
       players[PLAYER_A].address // Player A starts
     );
+
+    // Set community cards to be unique and lower value to avoid conflicts
+    // Using clubs (0-12), diamonds (13-25), hearts (26-38)
+    await stateStorage.connect(owner).updateGameCards([1, 14, 27, 2, 15]);
   }
 
   it("should create a side pot when a player goes all-in", async function () {

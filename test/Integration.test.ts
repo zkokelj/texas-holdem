@@ -356,7 +356,8 @@ describe("Integration Tests", function () {
                     currentBet: 0,  // Reset their current bet to 0
                     position: i,
                     holeCards: [i * 2, i * 2 + 1] as [number, number],
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: 200  // Add totalContribution field
                 });
             }
 
@@ -416,7 +417,8 @@ describe("Integration Tests", function () {
                     currentBet: 0,
                     position: i,
                     holeCards: [0, 0] as [number, number],
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: 0  // Add totalContribution field
                 });
             }
 
@@ -427,7 +429,8 @@ describe("Integration Tests", function () {
                 currentBet: 0,
                 position: 4,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
             });
 
             // Update tournament state to reflect 2 active players
@@ -461,7 +464,8 @@ describe("Integration Tests", function () {
                 currentBet: 0,
                 position: 0,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
             });
 
             // Eliminate players[1] to players[4]
@@ -473,7 +477,8 @@ describe("Integration Tests", function () {
                     currentBet: 0,
                     position: i,
                     holeCards: [0, 0] as [number, number],
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: 0  // Add totalContribution field
                 });
 
                 // Then process their elimination
@@ -495,7 +500,8 @@ describe("Integration Tests", function () {
                 currentBet: 0,
                 position: 0,
                 holeCards: [3, 16],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
             });
         });
     });

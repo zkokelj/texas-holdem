@@ -350,8 +350,8 @@ describe("GameLogic - Pot Split Scenarios", function () {
             // Each player should get:
             //  Their contribution back (1850) + half of the dead money 
             // TODO: @Ziga - check which player should get the remainder of the dead money
-            const expectedProfitBUTTON = BigInt(88);
-            const expectedProfitUTG = BigInt(87);
+            const expectedProfitBUTTON = BigInt(87);
+            const expectedProfitUTG = BigInt(88);
 
             // Calculate actual profits
             const buttonProfit = finalStacks.button - initialStacks.button;

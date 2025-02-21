@@ -205,10 +205,10 @@ contract GameLogic is IGameLogic {
         // In case if all-in we set the player status to AllIn, set his current bet and add funds to main pot
         if (callAmount >= playerState.stack) {
             playerState.status = IStateStorage.PlayerStatus.AllIn;
-            playerState.currentBet = gameState.currentBet;
+            playerState.currentBet = playerState.currentBet + playerState.stack;
             gameState.mainPot += playerState.stack;
-            playerState.stack = 0;
             playerState.totalContribution += playerState.stack;
+            playerState.stack = 0;
             stateStorage.updatePlayerState(player, playerState);
             stateStorage.updateGameState(gameState);
             stateStorage.setPlayerActedInRound(player, true);
@@ -270,8 +270,9 @@ contract GameLogic is IGameLogic {
             playerState.status = IStateStorage.PlayerStatus.AllIn;
             playerState.currentBet = totalAmount;
             gameState.mainPot += playerState.stack;
-            playerState.stack = 0;
             playerState.totalContribution += playerState.stack;
+            playerState.currentBet = playerState.currentBet + playerState.stack;
+            playerState.stack = 0;
             stateStorage.updatePlayerState(player, playerState);
             stateStorage.updateGameState(gameState);
             stateStorage.setPlayerActedInRound(player, true);
@@ -592,14 +593,24 @@ contract GameLogic is IGameLogic {
     function _awardPotToWinners(Pot memory pot) private {
         if (pot.amount == 0 || pot.eligiblePlayers.length == 0) return;
 
+        // DEBUG: Log pot and eligible players
+        console.log('Awarding pot of size:', pot.amount);
+        console.log('Eligible players:', pot.eligiblePlayers.length);
+
         // If only one eligible player, they win automatically
         if (pot.eligiblePlayers.length == 1) {
             address winner = pot.eligiblePlayers[0];
             IStateStorage.Player memory winnerState = stateStorage.getPlayer(
                 winner
             );
+
+            console.log('Single winner:', winner);
+            console.log('Winner stack before:', winnerState.stack);
+
             winnerState.stack += pot.amount;
             stateStorage.updatePlayerState(winner, winnerState);
+
+            console.log('Winner stack after:', winnerState.stack);
 
             emit PotAwarded(0, winner, pot.amount);
             return;
@@ -612,6 +623,11 @@ contract GameLogic is IGameLogic {
 
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
 
+        console.log('Community cards:');
+        for (uint8 i = 0; i < 5; i++) {
+            console.log('Card', i, ':', gameState.communityCards[i]);
+        }
+
         // Find the best hand(s) among eligible players
         for (uint8 i = 0; i < pot.eligiblePlayers.length; i++) {
             address playerAddr = pot.eligiblePlayers[i];
@@ -619,26 +635,38 @@ contract GameLogic is IGameLogic {
                 playerAddr
             );
 
+            console.log('Player at position:', player.position);
+            console.log('Hole card 1:', player.holeCards[0]);
+            console.log('Hole card 2:', player.holeCards[1]);
+
             (uint32 rank, ) = handEvaluator.evaluateHoldemHand(
                 player.holeCards,
                 gameState.communityCards
             );
+
+            console.log('Player', playerAddr, 'hand rank:', rank);
 
             if (rank < bestRank) {
                 // New best hand
                 bestRank = rank;
                 winnerCount = 1;
                 winners[0] = playerAddr;
+                console.log('New best hand by player:', playerAddr);
             } else if (rank == bestRank) {
                 // Tie - add this player to winners
                 winners[winnerCount] = playerAddr;
                 winnerCount++;
+                console.log('Tied for best hand:', playerAddr);
             }
         }
 
         // Award pot to winner(s)
         uint256 amountPerWinner = pot.amount / winnerCount;
         uint256 remainder = pot.amount % winnerCount;
+
+        console.log('Winners:', winnerCount);
+        console.log('Amount per winner:', amountPerWinner);
+        console.log('Remainder:', remainder);
 
         for (uint8 i = 0; i < winnerCount; i++) {
             address winner = winners[i];
@@ -651,8 +679,14 @@ contract GameLogic is IGameLogic {
                 ? amountPerWinner + remainder
                 : amountPerWinner;
 
+            console.log('Awarding to winner', i, ':', winner);
+            console.log('Award amount:', awardAmount);
+            console.log('Stack before:', winnerState.stack);
+
             winnerState.stack += awardAmount;
             stateStorage.updatePlayerState(winner, winnerState);
+
+            console.log('Stack after:', winnerState.stack);
 
             emit PotAwarded(0, winner, awardAmount);
         }

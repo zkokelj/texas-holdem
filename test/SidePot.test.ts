@@ -261,52 +261,52 @@ describe("GameLogic - Simple Side Pot Test", function () {
     });
   
     async function setupFivePlayerGame() {
-      // Set up five players with specified stacks and hole cards
-      for (let i = 0; i < 5; i++) {
-        // Player A gets small stack, others get normal stack
-        const stack = i === PLAYER_A ? SMALL_STACK : NORMAL_STACK;
-        
-        // Card assignments to create specific winning scenarios:
-        let holeCards;
-        
-        if (i === PLAYER_A) {
-          // Player A: Aces (best hand overall - to win main pot)
-          holeCards = [0, 13]; // Ace of Clubs, Ace of Diamonds
-        } else if (i === PLAYER_B) {
-          // Player B: Kings (second best hand - to win side pot)
-          holeCards = [12, 25]; // King of Clubs, King of Diamonds
-        } else if (i === PLAYER_C) {
-          // Player C: Queens (worst hand among those who don't fold)
-          holeCards = [11, 24]; // Queen of Clubs, Queen of Diamonds
-        } else {
-          // Players D and E: Random low cards (they will fold)
-          holeCards = [i * 2, i * 2 + 1];
+        // Set up five players with specified stacks and hole cards
+        for (let i = 0; i < 5; i++) {
+          // Player A gets small stack, others get normal stack
+          const stack = i === PLAYER_A ? SMALL_STACK : NORMAL_STACK;
+          
+          // Card assignments to create specific winning scenarios:
+          let holeCards;
+          
+          if (i === PLAYER_A) {
+            // Player A: Aces (best hand overall - to win main pot)
+            holeCards = [0, 13]; // Ace of Clubs, Ace of Diamonds
+          } else if (i === PLAYER_B) {
+            // Player B: Kings (second best hand - to win side pot)
+            holeCards = [12, 25]; // King of Clubs, King of Diamonds
+          } else if (i === PLAYER_C) {
+            // Player C: Queens (worst hand among those who don't fold)
+            holeCards = [11, 24]; // Queen of Clubs, Queen of Diamonds
+          } else {
+            // Players D and E: Random low cards (they will fold)
+            holeCards = [i * 2, i * 2 + 1];
+          }
+          
+          await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+            stack: stack,
+            status: 1, // Active
+            currentBet: 0,
+            position: i,
+            holeCards: holeCards,
+            lastActionTime: 0,
+            totalContribution: 0
+          });
         }
-        
-        await stateStorage.connect(owner).updatePlayerState(players[i].address, {
-          stack: stack,
-          status: 1, // Active
-          currentBet: 0,
-          position: i,
-          holeCards: holeCards,
-          lastActionTime: 0,
-          totalContribution: 0
-        });
+      
+        // Initialize game state at PreFlop
+        await stateStorage.connect(owner).updateGameBasics(
+          0, // PreFlop round (0)
+          0, // Empty pot
+          0, // No bet
+          players[PLAYER_A].address // Player A starts
+        );
+      
+        // VERY IMPORTANT: Set community cards with MIXED suits
+        // to avoid creating a flush for all players
+        // Using: 3♥, 7♣, 9♦, J♠, 4♠
+        await stateStorage.connect(owner).updateGameCards([29, 7, 22, 50, 43]);
       }
-  
-      // Initialize game state at PreFlop
-      await stateStorage.connect(owner).updateGameBasics(
-        0, // PreFlop round (0)
-        0, // Empty pot
-        0, // No bet
-        players[PLAYER_A].address // Player A starts
-      );
-  
-      // Set community cards to make the hands evaluate as desired
-      // Using remaining cards to form a board that doesn't give anyone a straight/flush
-      // 10, 8, 6, 4, 2 of Hearts (mixed ranks, same suit)
-      await stateStorage.connect(owner).updateGameCards([35, 33, 31, 29, 27]);
-    }
   
     it("should correctly handle pot distribution with multiple winners", async function () {
       console.log("----- SIDE POT DISTRIBUTION TEST -----");

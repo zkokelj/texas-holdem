@@ -234,4 +234,41 @@ describe("HandEvaluator New Test Cases", function () {
         // Expect player2 to win => result should be 2
         expect(result).to.equal(2);
     });
+
+
+    it("should evaluate hands correctly", async function () {
+        // Test the hand evaluation to make sure it's working correctly
+        // The test cards are:
+        // Player A (pos 0): Aces (0, 13) = Ace of Clubs, Ace of Diamonds
+        // Player B (pos 1): Kings (12, 25) = King of Clubs, King of Diamonds
+        // Player C (pos 2): Queens (11, 24) = Queen of Clubs, Queen of Diamonds
+        // Community cards: 10, 8, 6, 4, 2 of Hearts (35, 33, 31, 29, 27)
+        
+        console.log("----- HAND EVALUATION TEST -----");
+        
+        // Get the HandEvaluator contract
+        const handEvaluatorContract = await ethers.getContractAt("HandEvaluator", await handEvaluator.getAddress());
+        
+        // Test player A's hand (should be best)
+        const playerACards: [number, number] = [0, 13]; // Aces
+        const communityCards: [number, number, number, number, number] = [35, 33, 31, 29, 27]; // 10, 8, 6, 4, 2 of Hearts
+        
+        const playerARank = await handEvaluatorContract.evaluateHoldemHand(playerACards, communityCards);
+        console.log("Player A hand rank:", playerARank);
+        
+        // Test player B's hand (should be second)
+        const playerBCards: [number, number] = [12, 25]; // Kings
+        const playerBRank = await handEvaluatorContract.evaluateHoldemHand(playerBCards, communityCards);
+        console.log("Player B hand rank:", playerBRank);
+        
+        // Test player C's hand (should be third)
+        const playerCCards: [number, number] = [11, 24]; // Queens
+        const playerCRank = await handEvaluatorContract.evaluateHoldemHand(playerCCards, communityCards);
+        console.log("Player C hand rank:", playerCRank);
+        
+        // Verify that A's hand is better than B's, and B's is better than C's
+        // Lower rank = better hand in your implementation
+        expect(playerARank < playerBRank).to.be.true;
+        expect(playerBRank < playerCRank).to.be.true;
+      });
 });

@@ -107,7 +107,8 @@ describe("StateStorage", function () {
                 currentBet: 0,
                 position: 0,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0
             };
 
             await stateStorage.connect(authorized).updatePlayerState(players[0].address, playerState);
@@ -125,7 +126,8 @@ describe("StateStorage", function () {
                 currentBet: 0,
                 position: 2,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0
             };
 
             await stateStorage.connect(authorized).updatePlayerState(players[0].address, playerState);
@@ -142,7 +144,8 @@ describe("StateStorage", function () {
                 currentBet: 0,
                 position: 2,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0
             });
 
             // Then eliminate player
@@ -152,7 +155,8 @@ describe("StateStorage", function () {
                 currentBet: 0,
                 position: 2,
                 holeCards: [0, 0] as [number, number],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0
             });
 
             const playerAtPosition = await stateStorage.getPlayerAtPosition(2);

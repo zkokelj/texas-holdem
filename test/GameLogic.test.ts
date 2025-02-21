@@ -80,28 +80,28 @@ describe("GameLogic - Player Order", function () {
         for (let i = 0; i < 5; i++) {
             let currentBet = 0;
             let stack = INITIAL_STACK;
+            let totalContribution = 0;  // Initialize totalContribution
 
             // Deduct and set blind bets for SB and BB positions
             if (i === SB) {
                 currentBet = SMALL_BLIND;
                 stack = INITIAL_STACK - SMALL_BLIND;
+                totalContribution = SMALL_BLIND;  // SB's contribution
             } else if (i === BB) {
                 currentBet = BIG_BLIND;
                 stack = INITIAL_STACK - BIG_BLIND;
+                totalContribution = BIG_BLIND;  // BB's contribution
             }
 
             // Assign hole cards to each player
             let holeCards;
             if (i === BUTTON) {
-                // Give BUTTON a pair of Aces
                 holeCards = [51, 47]; // Ace of Spades, Ace of Hearts
             } else if (i === UTG) {
-                // Give UTG lower cards
-                holeCards = [40, 41]; // Lower cards that won't make a better hand
+                holeCards = [40, 41]; // Lower cards
             } else {
-                // Other players get sequential lower cards starting from 42
-                const holeCard1 = 42 + (i * 2);     // First card: 42,44,46
-                const holeCard2 = 43 + (i * 2);     // Second card: 43,45,47
+                const holeCard1 = 42 + (i * 2);
+                const holeCard2 = 43 + (i * 2);
                 holeCards = [holeCard1, holeCard2];
             }
 
@@ -112,7 +112,8 @@ describe("GameLogic - Player Order", function () {
                 currentBet: currentBet,
                 position: i,
                 holeCards: holeCards,
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: totalContribution  // Add totalContribution field
             });
         }
 
@@ -573,7 +574,8 @@ describe("GameLogic - Player Order", function () {
                 currentBet: 0,
                 position: UTG,
                 holeCards: [40, 41],
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
             });
 
             // UTG performs a raise with raiseAmount = 50

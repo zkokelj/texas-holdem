@@ -65,51 +65,53 @@ describe("GameLogic - Pot Split Scenarios", function () {
     // Test three-player showdown with clear winner
     describe.skip("Three-Player Showdown", function () {
         beforeEach(async function () {
-            // Initialize each player's state with specific hole cards
+            // Initialize each player's state
             for (let i = 0; i < 5; i++) {
                 let currentBet = 0;
                 let stack = INITIAL_STACK;
+                let totalContribution = 0;  // Initialize totalContribution
 
+                // Deduct and set blind bets for SB and BB positions
                 if (i === SB) {
                     currentBet = SMALL_BLIND;
                     stack = INITIAL_STACK - SMALL_BLIND;
+                    totalContribution = SMALL_BLIND;  // SB's contribution
                 } else if (i === BB) {
                     currentBet = BIG_BLIND;
                     stack = INITIAL_STACK - BIG_BLIND;
+                    totalContribution = BIG_BLIND;  // BB's contribution
                 }
 
-                // Assign specific hole cards to create a clear winner
+                // Assign hole cards to each player
                 let holeCards;
                 if (i === BUTTON) {
-                    // BUTTON gets Ace-King suited (strongest hand)
-                    holeCards = [51, 50]; // Ace of Spades, King of Spades
+                    holeCards = [51, 47]; // Ace of Spades, Ace of Hearts
                 } else if (i === UTG) {
-                    // UTG gets Queen-Jack suited (second strongest)
-                    holeCards = [49, 48]; // Queen of Spades, Jack of Spades
-                } else if (i === MP) {
-                    // MP gets Ten-Nine suited (third strongest)
-                    holeCards = [47, 46]; // Ten of Spades, Nine of Spades
+                    holeCards = [40, 41]; // Lower cards
                 } else {
-                    // Other players get weaker cards
-                    holeCards = [i * 2, i * 2 + 1];
+                    const holeCard1 = 42 + (i * 2);
+                    const holeCard2 = 43 + (i * 2);
+                    holeCards = [holeCard1, holeCard2];
                 }
 
+                // Update state for each player with their position and stack
                 await stateStorage.connect(owner).updatePlayerState(players[i].address, {
                     stack: stack,
-                    status: 1, // Active
+                    status: 1,         // 1 = Active player
                     currentBet: currentBet,
                     position: i,
                     holeCards: holeCards,
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: totalContribution  // Add totalContribution field
                 });
             }
 
             // Initialize the game state for pre-flop round
             await stateStorage.connect(owner).updateGameBasics(
-                0,              // PreFlop round
-                SMALL_BLIND + BIG_BLIND,      // Current pot size (SB + BB = 75)
-                BIG_BLIND,      // Current bet to call
-                players[UTG].address  // UTG starts the action pre-flop
+                0,                      // 0 = PreFlop round
+                BIG_BLIND,             // Current pot size
+                BIG_BLIND,             // Current bet to call
+                players[UTG].address   // UTG starts the action pre-flop
             );
         });
 
@@ -216,13 +218,16 @@ describe("GameLogic - Pot Split Scenarios", function () {
             for (let i = 0; i < 5; i++) {
                 let currentBet = 0;
                 let stack = INITIAL_STACK;
+                let totalContribution = 0;  // Initialize totalContribution
 
                 if (i === SB) {
                     currentBet = SMALL_BLIND;
                     stack = INITIAL_STACK - SMALL_BLIND;
+                    totalContribution = SMALL_BLIND;  // SB's contribution
                 } else if (i === BB) {
                     currentBet = BIG_BLIND;
                     stack = INITIAL_STACK - BIG_BLIND;
+                    totalContribution = BIG_BLIND;  // BB's contribution
                 }
 
                 // Assign specific hole cards to create a split pot scenario
@@ -244,7 +249,8 @@ describe("GameLogic - Pot Split Scenarios", function () {
                     currentBet: currentBet,
                     position: i,
                     holeCards: holeCards,
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: totalContribution  // Add totalContribution field
                 });
             }
 

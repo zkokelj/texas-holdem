@@ -79,7 +79,8 @@ describe("Integration Tests", function () {
                         currentBet: currentBet,
                         position: i,
                         holeCards: [0, 0] as [number, number],
-                        lastActionTime: 0
+                        lastActionTime: 0,
+                        totalContribution: 0  // Add totalContribution field
                     }
                 );
             }
@@ -125,7 +126,7 @@ describe("Integration Tests", function () {
             //     currentRound: afterTournamentState.currentRound
             // });
 
-            // Set up all players first with unique hole cards
+            // Initialize each player's state
             for (let i = 0; i < 5; i++) {
                 await stateStorage.updatePlayerState(await players[i].getAddress(), {
                     stack: INITIAL_STACK,
@@ -133,9 +134,85 @@ describe("Integration Tests", function () {
                     currentBet: 0,
                     position: i,
                     holeCards: [i * 2, i * 2 + 1] as [number, number],  // Each player gets unique cards
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: 0  // Add totalContribution field
                 });
             }
+
+            // Initialize each player's state with specific hole cards
+            for (let i = 0; i < 5; i++) {
+                let holeCards: [number, number];
+                if (i === 0) {
+                    holeCards = [51, 50]; // Ace of Spades, King of Spades
+                } else if (i === 1) {
+                    holeCards = [49, 48]; // Queen of Spades, Jack of Spades
+                } else {
+                    holeCards = [i * 2, i * 2 + 1];
+                }
+
+                await stateStorage.updatePlayerState(await players[i].getAddress(), {
+                    stack: INITIAL_STACK,
+                    status: 1, // Active
+                    currentBet: 0,
+                    position: i,
+                    holeCards: holeCards,
+                    lastActionTime: 0,
+                    totalContribution: 0  // Add totalContribution field
+                });
+            }
+
+            // Set up player states for split pot scenario
+            await stateStorage.updatePlayerState(await players[0].getAddress(), {
+                stack: INITIAL_STACK,
+                status: 1,
+                currentBet: 0,
+                position: 0,
+                holeCards: [51, 50] as [number, number], // Ace-King suited
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
+            });
+
+            await stateStorage.updatePlayerState(await players[1].getAddress(), {
+                stack: INITIAL_STACK,
+                status: 1,
+                currentBet: 0,
+                position: 1,
+                holeCards: [49, 48] as [number, number], // Queen-Jack suited
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
+            });
+
+            // Set up player states for all-in scenario
+            await stateStorage.updatePlayerState(await players[2].getAddress(), {
+                stack: 100, // Small stack for all-in
+                status: 1,
+                currentBet: 0,
+                position: 2,
+                holeCards: [47, 46] as [number, number], // Ten-Nine suited
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
+            });
+
+            // Set up player states for folding scenario
+            await stateStorage.updatePlayerState(await players[3].getAddress(), {
+                stack: INITIAL_STACK,
+                status: 1,
+                currentBet: 0,
+                position: 3,
+                holeCards: [45, 44] as [number, number], // Eight-Seven suited
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
+            });
+
+            await stateStorage.updatePlayerState(await players[4].getAddress(), {
+                stack: INITIAL_STACK,
+                status: 1,
+                currentBet: 0,
+                position: 4,
+                holeCards: [43, 42] as [number, number], // Six-Five suited
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
+            });
 
             // Manually set player[0]'s hole cards to force a winning hand.
             await stateStorage.updatePlayerState(await players[0].getAddress(), {
@@ -144,7 +221,8 @@ describe("Integration Tests", function () {
                 currentBet: 0,
                 position: 0,
                 holeCards: [51, 38] as [number, number],  // Ace of Spades, King of Clubs
-                lastActionTime: 0
+                lastActionTime: 0,
+                totalContribution: 0  // Add totalContribution field
             });
 
             // Set initial game state with players[2] as current turn (UTG - Under The Gun)
@@ -154,6 +232,27 @@ describe("Integration Tests", function () {
                 BIG_BLIND, // currentBet
                 await players[2].getAddress() // currentTurn - UTG
             );
+
+            // Update player states for blinds
+            await stateStorage.updatePlayerState(await players[1].getAddress(), {
+                stack: INITIAL_STACK - SMALL_BLIND,
+                status: 1,
+                currentBet: SMALL_BLIND,
+                position: 1,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: SMALL_BLIND  // Add totalContribution field
+            });
+
+            await stateStorage.updatePlayerState(await players[2].getAddress(), {
+                stack: INITIAL_STACK - BIG_BLIND,
+                status: 1,
+                currentBet: BIG_BLIND,
+                position: 2,
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: BIG_BLIND  // Add totalContribution field
+            });
 
             // Log final setup state and first expected player
             const setupState = await stateStorage.getGameState();

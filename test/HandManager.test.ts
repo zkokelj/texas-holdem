@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Contract } from "ethers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("HandManager", function () {
     let handManager: any;
@@ -59,10 +59,42 @@ describe("HandManager", function () {
                 status: 1, // Active
                 currentBet: 0,
                 position: i,
-                holeCards: [0, 0],
-                lastActionTime: 0
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: 0
             });
         }
+
+        // Update player states for testing
+        await stateStorage.connect(owner).updatePlayerState(players[0].address, {
+            stack: INITIAL_STACK,
+            status: 1,
+            currentBet: 0,
+            position: 0,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: 0
+        });
+
+        await stateStorage.connect(owner).updatePlayerState(players[1].address, {
+            stack: INITIAL_STACK - SMALL_BLIND,
+            status: 1,
+            currentBet: SMALL_BLIND,
+            position: 1,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: SMALL_BLIND
+        });
+
+        await stateStorage.connect(owner).updatePlayerState(players[2].address, {
+            stack: INITIAL_STACK - BIG_BLIND,
+            status: 1,
+            currentBet: BIG_BLIND,
+            position: 2,
+            holeCards: [0, 0] as [number, number],
+            lastActionTime: 0,
+            totalContribution: BIG_BLIND
+        });
     }
 
     describe("Initial State", function () {
@@ -148,8 +180,9 @@ describe("HandManager", function () {
                 status: 1,
                 currentBet: 0,
                 position: 1,
-                holeCards: [0, 0],
-                lastActionTime: 0
+                holeCards: [0, 0] as [number, number],
+                lastActionTime: 0,
+                totalContribution: 0
             });
 
             await expect(handManager.startNewHand())
@@ -275,7 +308,8 @@ describe("HandManager", function () {
                 currentBet: currentState.currentBet,
                 position: currentState.position,
                 holeCards: [...currentState.holeCards], // Create a new array
-                lastActionTime: currentState.lastActionTime
+                lastActionTime: currentState.lastActionTime,
+                totalContribution: currentState.totalContribution
             });
 
             await expect(handManager.revealHand(players[0].address))

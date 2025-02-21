@@ -77,7 +77,7 @@ describe("HandManager", function () {
         });
 
         await stateStorage.connect(owner).updatePlayerState(players[1].address, {
-            stack: INITIAL_STACK - SMALL_BLIND,
+            stack: INITIAL_STACK,
             status: 1,
             currentBet: SMALL_BLIND,
             position: 1,
@@ -87,7 +87,7 @@ describe("HandManager", function () {
         });
 
         await stateStorage.connect(owner).updatePlayerState(players[2].address, {
-            stack: INITIAL_STACK - BIG_BLIND,
+            stack: INITIAL_STACK,
             status: 1,
             currentBet: BIG_BLIND,
             position: 2,

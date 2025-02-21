@@ -154,7 +154,6 @@ contract GameLogic is IGameLogic {
         IStateStorage.Player memory playerState = stateStorage.getPlayer(
             player
         );
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
 
         playerState.status = IStateStorage.PlayerStatus.Folded;
 
@@ -582,16 +581,15 @@ contract GameLogic is IGameLogic {
 
         // Step 5: Award each pot to the winner(s)
         for (uint8 i = 0; i < uniqueCount; i++) {
-            _awardPotToWinners(i, pots[i]);
+            _awardPotToWinners(pots[i]);
         }
     }
 
     /**
      * @dev Awards a pot to the winner(s) with the best hand
-     * @param potIndex Index of the pot (0 for main pot, 1+ for side pots)
      * @param pot The pot to award
      */
-    function _awardPotToWinners(uint8 potIndex, Pot memory pot) private {
+    function _awardPotToWinners(Pot memory pot) private {
         if (pot.amount == 0 || pot.eligiblePlayers.length == 0) return;
 
         // If only one eligible player, they win automatically

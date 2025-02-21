@@ -70,7 +70,8 @@ describe("GameLogic - Simple Side Pot Test", function () {
         currentBet: 0,
         position: i,
         holeCards: holeCards,
-        lastActionTime: 0
+        lastActionTime: 0,
+        totalContribution: 0
       });
     }
 

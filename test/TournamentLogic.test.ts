@@ -210,7 +210,8 @@ describe("TournamentLogic", function () {
                         currentBet: 0,
                         position: i,
                         holeCards: [0, 0],
-                        lastActionTime: 0
+                        lastActionTime: 0,
+                        totalContribution: 0
                     }
                 );
                 await tournamentLogic.connect(owner).processElimination(playerAddresses[i]);
@@ -235,7 +236,8 @@ describe("TournamentLogic", function () {
                     currentBet: 0,
                     position: 0,
                     holeCards: [0, 0],
-                    lastActionTime: 0
+                    lastActionTime: 0,
+                    totalContribution: 0
                 }
             );
 
@@ -330,7 +332,8 @@ describe("TournamentLogic", function () {
                         currentBet: 0,
                         position: i,
                         holeCards: [0, 0],
-                        lastActionTime: 0
+                        lastActionTime: 0,
+                        totalContribution: 0
                     }
                 );
                 await tournamentLogic.connect(owner).processElimination(playerAddresses[i]);

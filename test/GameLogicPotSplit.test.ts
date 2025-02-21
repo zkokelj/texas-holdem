@@ -385,7 +385,8 @@ describe("GameLogic - Pot Split Scenarios", function () {
               currentBet: 0,
               position: i,
               holeCards: [i * 2, i * 2 + 1], // Simple cards
-              lastActionTime: 0
+              lastActionTime: 0,
+              totalContribution: 0
             });
           }
       
@@ -666,7 +667,8 @@ describe("GameLogic - Pot Split Scenarios", function () {
             currentBet: 0,
             position: 0,
             holeCards: [50, 51], // Ace-King of spades (strongest hand)
-            lastActionTime: 0
+            lastActionTime: 0,
+            totalContribution: 0
           });
           
           await stateStorage.connect(owner).updatePlayerState(players[1].address, {
@@ -675,7 +677,8 @@ describe("GameLogic - Pot Split Scenarios", function () {
             currentBet: 0,
             position: 1,
             holeCards: [48, 49], // Queen-Jack of spades (second strongest)
-            lastActionTime: 0
+            lastActionTime: 0,
+            totalContribution: 0
           });
           
           await stateStorage.connect(owner).updatePlayerState(players[2].address, {
@@ -684,7 +687,8 @@ describe("GameLogic - Pot Split Scenarios", function () {
             currentBet: 0,
             position: 2,
             holeCards: [46, 47], // Ten-Nine of spades (third strongest)
-            lastActionTime: 0
+            lastActionTime: 0,
+            totalContribution: 0
           });
           
           // Track initial stacks

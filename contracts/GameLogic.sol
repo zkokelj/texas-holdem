@@ -34,7 +34,6 @@ contract GameLogic is IGameLogic {
     }
 
     // ==================== EVENTS ====================
-    event SidePotCreated(uint256 potIndex, uint256 amount);
     event PotAwarded(uint256 potIndex, address winner, uint256 amount);
     event PlayerAllIn(address indexed player, uint256 amount);
     event LogDebug(string message);
@@ -159,6 +158,7 @@ contract GameLogic is IGameLogic {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
 
         playerState.status = IStateStorage.PlayerStatus.Folded;
+
         stateStorage.updatePlayerState(player, playerState);
 
         uint8 activeCount = _getActivePlayerCount();
@@ -203,10 +203,18 @@ contract GameLogic is IGameLogic {
         // callAmount is the amount to call to get to the current bet
         uint256 callAmount = gameState.currentBet - playerState.currentBet;
 
-        // If calling would put them all-in we need to handle everything in the _processAllIn function
-        // TODO: Ziga - Make sure _processAllIn handles things the same way if triggered from call and from raise!
+        // Check if player goes all-in with the check!
+        // In case if all-in we set the player status to AllIn, set his current bet and add funds to main pot
         if (callAmount >= playerState.stack) {
-            _processAllIn(player, playerState.stack);
+            playerState.status = IStateStorage.PlayerStatus.AllIn;
+            playerState.currentBet = gameState.currentBet;
+            gameState.mainPot += playerState.stack;
+            playerState.stack = 0;
+            playerState.totalContribution += playerState.stack;
+            stateStorage.updatePlayerState(player, playerState);
+            stateStorage.updateGameState(gameState);
+            stateStorage.setPlayerActedInRound(player, true);
+            _moveToNextPlayer();
             return;
         }
 
@@ -216,6 +224,7 @@ contract GameLogic is IGameLogic {
         playerState.stack -= callAmount;
         playerState.currentBet = gameState.currentBet;
         gameState.mainPot += callAmount;
+        playerState.totalContribution += callAmount;
         gameState.lastActionAmount = callAmount;
 
         stateStorage.updatePlayerState(player, playerState);
@@ -256,12 +265,23 @@ contract GameLogic is IGameLogic {
         console.log('\ttotalAmount', totalAmount);
         console.log('\tplayerState.stack', playerState.stack);
 
+        // In case player is going all-in with the raise
+        // We set player status to AllIn, set his current bet and add funds to main pot
         if (totalAmount == playerState.stack) {
-            console.log('\tPlayer going all-in');
-            _processAllIn(player, totalAmount);
+            console.log('\tPlayer going all-in from raise');
+            playerState.status = IStateStorage.PlayerStatus.AllIn;
+            playerState.currentBet = gameState.currentBet;
+            gameState.mainPot += playerState.stack;
+            playerState.stack = 0;
+            playerState.totalContribution += playerState.stack;
+            stateStorage.updatePlayerState(player, playerState);
+            stateStorage.updateGameState(gameState);
+            stateStorage.setPlayerActedInRound(player, true);
+            _moveToNextPlayer();
             return;
         }
 
+        // Now we proceed with the normal raise logic - player is not going all-in
         uint256 minRaiseAmount = gameState.lastRaise > 0
             ? gameState.lastRaise
             : tournament.bigBlind;
@@ -276,25 +296,10 @@ contract GameLogic is IGameLogic {
         gameState.lastRaise = raiseAmount;
         gameState.lastActionAmount = totalAmount;
         gameState.lastAggressor = playerState.position;
-
-        // check if any players went all-in with lower amount than the raise amount here and trigger side pots creation
-        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-            address playerAddr = stateStorage.getPlayerAtPosition(i);
-            if (playerAddr != address(0)) {
-                IStateStorage.Player memory otherPlayer = stateStorage
-                    .getPlayer(playerAddr);
-                // If player is all-in (stack = 0) and bet less than current bet
-                if (
-                    otherPlayer.stack == 0 &&
-                    otherPlayer.currentBet < gameState.currentBet
-                ) {
-                    _createSidePots(otherPlayer.currentBet); // TODO: Ziga - Make sure this _createSidePots function is correct!
-                }
-            }
-        }
-
+        playerState.totalContribution += totalAmount;
         stateStorage.setPlayerActedInRound(player, true);
 
+        // Reset the acted status for all other active players (because they have to act again after the raise)
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address otherPlayer = stateStorage.getPlayerAtPosition(i);
             if (otherPlayer != address(0) && otherPlayer != player) {
@@ -314,74 +319,6 @@ contract GameLogic is IGameLogic {
         _moveToNextPlayer();
     }
 
-    /**
-     * @dev Processes an all-in action for a player
-     * @param player The address of the player going all-in
-     * @param amount The amount being bet (entire stack)
-     */
-    function _processAllIn(address player, uint256 amount) private {
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        IStateStorage.Player memory playerState = stateStorage.getPlayer(
-            player
-        );
-
-        require(
-            playerState.status == IStateStorage.PlayerStatus.Active,
-            'Player not active'
-        );
-        require(amount == playerState.stack, 'Must bet entire stack');
-
-        // toCall is the amount to call to get to the current bet
-        uint256 toCall = gameState.currentBet > playerState.currentBet
-            ? gameState.currentBet - playerState.currentBet
-            : 0;
-
-        // if we don't have enough to call, we need to create a side pot
-        if (amount < toCall) {
-            console.log(
-                '\tPlayer going all-in - and side pot needed because they dont have enough to call'
-            );
-            _createSidePots(playerState.currentBet + amount);
-        }
-
-        playerState.stack = 0;
-        playerState.currentBet += amount;
-        gameState.mainPot += amount;
-
-        stateStorage.setPlayerActedInRound(player, true);
-
-        // If the player's current bet is greater than the game's current bet,
-        // update the game's last raise and current bet to reflect the player's bet.
-        // Then, reset the acted status for all other active players.
-        if (playerState.currentBet > gameState.currentBet) {
-            gameState.lastRaise = playerState.currentBet - gameState.currentBet;
-            gameState.currentBet = playerState.currentBet;
-
-            for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-                address otherPlayer = stateStorage.getPlayerAtPosition(i);
-                if (otherPlayer != address(0) && otherPlayer != player) {
-                    IStateStorage.Player memory otherPlayerState = stateStorage
-                        .getPlayer(otherPlayer);
-                    if (
-                        otherPlayerState.status ==
-                        IStateStorage.PlayerStatus.Active
-                    ) {
-                        stateStorage.setPlayerActedInRound(otherPlayer, false);
-                    }
-                }
-            }
-        }
-
-        stateStorage.updatePlayerState(player, playerState);
-        stateStorage.updateGameState(gameState);
-
-        // emit the event for the player going all-in
-        emit PlayerAllIn(player, amount);
-
-        // move to the next player
-        _moveToNextPlayer();
-    }
-
     // ==================== GAME FLOW CONTROL FUNCTIONS ====================
     /**
      * @dev Moves the game to the next betting round
@@ -394,6 +331,7 @@ contract GameLogic is IGameLogic {
             'Hand complete'
         );
 
+        // Reset the current bet and acted status for all players
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddr = stateStorage.getPlayerAtPosition(i);
             if (playerAddr != address(0)) {
@@ -411,6 +349,7 @@ contract GameLogic is IGameLogic {
         gameState.currentBet = 0;
         gameState.lastRaise = 0;
 
+        // Set the current turn to the next active player
         address sbPlayer = stateStorage.getPlayerAtPosition(1);
         if (gameState.currentRound >= IStateStorage.BettingRound.PreFlop) {
             gameState.currentTurn = sbPlayer != address(0)
@@ -420,6 +359,8 @@ contract GameLogic is IGameLogic {
             gameState.currentTurn = _getNextActivePlayer(address(0));
         }
 
+        // Deal the cards for the new round
+        // TODO: Ziga - Review this part of the code
         uint8[] memory newCards;
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
             newCards = handManager.dealFlop();
@@ -496,156 +437,7 @@ contract GameLogic is IGameLogic {
         }
     }
 
-    // ==================== POT MANAGEMENT FUNCTIONS ====================
-    /**
-     * @dev Creates side pots when a player goes all-in
-     * @param allInAmount The amount the all-in player has bet
-     */
-    function _createSidePots(uint256 allInAmount) private {
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        uint256 sidePotAmount = 0;
-        address allInPlayer = address(0);
-
-        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-            address playerAddr = stateStorage.getPlayerAtPosition(i);
-            if (playerAddr != address(0)) {
-                IStateStorage.Player memory player = stateStorage.getPlayer(
-                    playerAddr
-                );
-                if (player.currentBet == allInAmount && player.stack == 0) {
-                    allInPlayer = playerAddr;
-                }
-
-                if (
-                    player.status == IStateStorage.PlayerStatus.Active &&
-                    player.currentBet > allInAmount
-                ) {
-                    sidePotAmount += (player.currentBet - allInAmount);
-                    player.currentBet = allInAmount;
-                    stateStorage.updatePlayerState(playerAddr, player);
-                }
-            }
-        }
-
-        if (sidePotAmount > 0) {
-            uint256 newPotIndex = stateStorage.sidePotCount();
-
-            for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-                address playerAddr = stateStorage.getPlayerAtPosition(i);
-                if (playerAddr != address(0)) {
-                    if (
-                        playerAddr == allInPlayer ||
-                        stateStorage.getPlayer(playerAddr).status ==
-                        IStateStorage.PlayerStatus.Active
-                    ) {
-                        stateStorage.setPotEligibility(
-                            newPotIndex,
-                            playerAddr,
-                            true
-                        );
-                    }
-                }
-            }
-
-            stateStorage.createSidePot(newPotIndex, sidePotAmount);
-            gameState.mainPot -= sidePotAmount;
-            stateStorage.updateGameState(gameState);
-
-            emit SidePotCreated(newPotIndex, sidePotAmount);
-        }
-    }
-
-    /**
-     * @dev Awards all pots (main and side pots) to the winners
-     */
-    function _awardPots() private {
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        uint256 totalSidePots = stateStorage.sidePotCount();
-
-        for (uint256 i = 0; i < totalSidePots; i++) {
-            (uint256 amount, bool isResolved) = stateStorage.getSidePot(i);
-            if (!isResolved) {
-                address[] memory winners = _determineWinnersForPot(i);
-                _awardPot(i, winners, amount);
-                stateStorage.setSidePotResolved(i);
-            }
-        }
-
-        if (gameState.mainPot > 0) {
-            address[] memory winners = _determineWinnersForPot(
-                type(uint256).max
-            );
-            _awardPot(type(uint256).max, winners, gameState.mainPot);
-            gameState.mainPot = 0;
-            stateStorage.updateGameState(gameState);
-        }
-    }
-
-    /**
-     * @dev Awards a specific pot to the winner(s)
-     * @param potIndex The index of the pot to award (type(uint256).max for main pot)
-     * @param winners Array of winning player addresses
-     * @param amount The amount to award
-     */
-    function _awardPot(
-        uint256 potIndex,
-        address[] memory winners,
-        uint256 amount
-    ) private {
-        if (winners.length == 0) return;
-
-        uint256 splitAmount = amount / winners.length;
-        uint256 remainder = amount % winners.length;
-
-        for (uint256 i = 0; i < winners.length; i++) {
-            IStateStorage.Player memory winnerState = stateStorage.getPlayer(
-                winners[i]
-            );
-            uint256 winnerAmount = splitAmount;
-
-            if (i == 0) {
-                winnerAmount += remainder;
-            }
-
-            winnerState.stack += winnerAmount;
-            stateStorage.updatePlayerState(winners[i], winnerState);
-            emit PotAwarded(potIndex, winners[i], winnerAmount);
-        }
-    }
-
-    /**
-     * @dev Awards the pot to the last remaining player
-     */
-    function _awardPotToLastPlayer() private {
-        address lastPlayer;
-        uint8 activePlayers = 0;
-
-        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
-            address playerAddress = stateStorage.getPlayerAtPosition(i);
-            if (playerAddress != address(0)) {
-                IStateStorage.Player memory player = stateStorage.getPlayer(
-                    playerAddress
-                );
-                if (player.status == IStateStorage.PlayerStatus.Active) {
-                    lastPlayer = playerAddress;
-                    activePlayers++;
-                }
-            }
-        }
-
-        require(activePlayers == 1, 'More than one player active');
-
-        IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        IStateStorage.Player memory winner = stateStorage.getPlayer(lastPlayer);
-        winner.stack += gameState.mainPot;
-        stateStorage.updatePlayerState(lastPlayer, winner);
-
-        gameState.mainPot = 0;
-        stateStorage.updateGameState(gameState);
-
-        _resetGameState();
-        emit RoundComplete(IStateStorage.BettingRound.PreFlop);
-    }
+    // ==================== CHIP DISTRIBUTION FUNCTIONS ====================
 
     // ==================== HELPER FUNCTIONS ====================
     /**
@@ -867,6 +659,7 @@ contract GameLogic is IGameLogic {
                 );
                 if (player.currentBet > 0) {
                     player.currentBet = 0;
+                    player.totalContribution = 0;
                     stateStorage.updatePlayerState(playerAddress, player);
                 }
             }

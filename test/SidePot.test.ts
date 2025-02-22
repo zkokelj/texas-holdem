@@ -86,9 +86,13 @@ describe("GameLogic - Simple Side Pot Test", function () {
       players[PLAYER_A].address // Player A starts
     );
 
-    // Set community cards to give Player A three of a kind
-    // Using: 8♥, K♣, A♦, 4♠, 3♠
-    await stateStorage.connect(owner).updateGameCards([33, 12, 13, 43, 42]);
+    // Set community cards:
+    // 8♠ (45) - gives Player A three of a kind (different suit from Player A's 8s)
+    // K♠ (50) - high card
+    // A♠ (51) - high card
+    // 5♠ (42) - irrelevant
+    // T♠ (47) - irrelevant
+    await stateStorage.connect(owner).updateGameCards([45, 50, 51, 42, 47]);
   }
 
   it("should correctly handle pot distribution with all-in player", async function () {
@@ -270,17 +274,20 @@ describe("GameLogic - Simple Side Pot Test", function () {
           let holeCards;
           
           if (i === PLAYER_A) {
-            // Player A: Pocket 8s for three of a kind with community cards
-            holeCards = [7, 20]; // 8♣, 8♦
+            // Player A: Pocket 8s for three of a kind with community 8
+            holeCards = [6, 19]; // 8♣, 8♦ (indices 6, 19)
           } else if (i === PLAYER_B) {
             // Player B: Pocket Jacks for a pair
-            holeCards = [10, 23]; // J♣, J♦
+            holeCards = [9, 22]; // J♣, J♦ (indices 9, 22)
           } else if (i === PLAYER_C) {
             // Player C: 2-7 offsuit (worst starting hand)
-            holeCards = [1, 19]; // 2♣, 7♦
+            holeCards = [0, 18]; // 2♣, 7♦ (indices 0, 18)
+          } else if (i === PLAYER_D) {
+            // Player D: Low cards (will fold)
+            holeCards = [1, 14]; // 3♣, 3♦ (indices 1, 14)
           } else {
-            // Players D and E: Random low cards (they will fold)
-            holeCards = [i * 2, i * 2 + 1];
+            // Player E: Low cards (will fold)
+            holeCards = [2, 15]; // 4♣, 4♦ (indices 2, 15)
           }
           
           await stateStorage.connect(owner).updatePlayerState(players[i].address, {
@@ -302,9 +309,13 @@ describe("GameLogic - Simple Side Pot Test", function () {
           players[PLAYER_A].address // Player A starts
         );
       
-        // Set community cards to give Player A three of a kind
-        // Using: 8♥, K♣, A♦, 4♠, 3♠
-        await stateStorage.connect(owner).updateGameCards([33, 12, 13, 43, 42]);
+        // Set community cards:
+        // 8♠ (45) - gives Player A three of a kind (different suit from Player A's 8s)
+        // K♠ (50) - high card
+        // A♠ (51) - high card
+        // 5♠ (42) - irrelevant
+        // T♠ (47) - irrelevant
+        await stateStorage.connect(owner).updateGameCards([45, 50, 51, 42, 47]);
       }
   
     it("should correctly handle pot distribution with multiple winners", async function () {
@@ -396,6 +407,14 @@ describe("GameLogic - Simple Side Pot Test", function () {
       const gameStateAfterBetting4 = await stateStorage.getGameState();
       console.log("Current round after betting4:", gameStateAfterBetting4.currentRound);
 
+      // Set community cards right before final round:
+      // 8♠ (45) - gives Player A three of a kind (different suit from Player A's 8s)
+      // K♠ (50) - high card
+      // A♠ (51) - high card
+      // 5♠ (42) - irrelevant
+      // T♠ (47) - irrelevant
+      await stateStorage.connect(owner).updateGameCards([45, 50, 51, 42, 47]);
+
       // Player B checks
       console.log("\nPlayer B checks");
       await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
@@ -406,87 +425,6 @@ describe("GameLogic - Simple Side Pot Test", function () {
 
       const gameStateAfterBetting5 = await stateStorage.getGameState();
       console.log("Current round after betting5:", gameStateAfterBetting5.currentRound);
-  
-      // Set up a try-catch block to handle the chain of actions that need to happen
-    //   try {
-    //     // If we're still in PreFlop, move to Flop
-    //     if (gameStateAfterBetting.currentRound === 0) {
-    //       console.log("\nAttempting to move to Flop");
-    //       await gameLogic.nextRound();
-    //       console.log("Successfully moved to Flop");
-          
-    //       const flop = await stateStorage.getGameState();
-    //       console.log("Current round after nextRound:", flop.currentRound);
-    //       console.log("Current turn:", flop.currentTurn);
-          
-    //       // Check who needs to act in this round
-    //       const playerBTurn = flop.currentTurn === players[PLAYER_B].address;
-    //       const playerCTurn = flop.currentTurn === players[PLAYER_C].address;
-          
-    //       console.log("Is it Player B's turn?", playerBTurn);
-    //       console.log("Is it Player C's turn?", playerCTurn);
-          
-    //       // Depending on whose turn it is, have them CHECK
-    //       if (playerBTurn) {
-    //         console.log("Player B checks");
-    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-    //         console.log("Player C checks");
-    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-    //       } else if (playerCTurn) {
-    //         console.log("Player C checks");
-    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-    //         console.log("Player B checks");
-    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-    //       }
-          
-    //       // Move to Turn
-    //       console.log("\nAttempting to move to Turn");
-    //       await gameLogic.nextRound();
-    //       console.log("Successfully moved to Turn");
-          
-    //       const turn = await stateStorage.getGameState();
-    //       console.log("Current round after nextRound:", turn.currentRound);
-          
-    //       // CHECK actions on Turn
-    //       if (turn.currentTurn === players[PLAYER_B].address) {
-    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-    //       } else {
-    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-    //       }
-          
-    //       // Move to River
-    //       console.log("\nAttempting to move to River");
-    //       await gameLogic.nextRound();
-    //       console.log("Successfully moved to River");
-          
-    //       const river = await stateStorage.getGameState();
-    //       console.log("Current round after nextRound:", river.currentRound);
-          
-    //       // CHECK actions on River
-    //       if (river.currentTurn === players[PLAYER_B].address) {
-    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-    //       } else {
-    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-    //       }
-          
-    //       // Showdown should happen automatically now
-    //     } else {
-    //       console.log("Game already progressed past PreFlop - unexpected state");
-    //     }
-    //   } catch (error: any) {
-    //     console.log("Error occurred:", error.message);
-        
-    //     // If error says "Hand complete", it means the showdown already happened
-    //     if (error.message.includes("Hand complete")) {
-    //       console.log("Hand is already complete, showdown likely happened automatically");
-    //     } else {
-    //       throw error;
-    //     }
-    //   }
   
       // Log final stacks
       console.log("\nFinal stacks after showdown:");

@@ -205,30 +205,18 @@ contract HandEvaluator {
     function findFourOfAKindRank(
         uint8[13] memory counts
     ) private pure returns (uint32) {
-        uint8 fourOfAKind = 0;
-        uint8 kicker = 0;
-        bool foundQuads = false;
-
-        // Find the highest four of a kind
-        for (int8 i = 12; i >= 0; i--) {
-            if (counts[uint8(i)] == 4) {
-                fourOfAKind = uint8(i);
-                foundQuads = true;
-                break;
+        uint32 rank = 0;
+        for (uint8 i = 0; i < 13; i++) {
+            if (counts[i] == 4) {
+                rank = i * 13;
+                for (uint8 j = 0; j < 13; j++) {
+                    if (counts[j] == 1) {
+                        return rank + j;
+                    }
+                }
             }
         }
-
-        require(foundQuads, 'No four of a kind found');
-
-        // Find the highest kicker
-        for (int8 i = 12; i >= 0; i--) {
-            if (counts[uint8(i)] == 1) {
-                kicker = uint8(i);
-                break;
-            }
-        }
-
-        return uint32(fourOfAKind) * 13 + kicker;
+        return rank;
     }
 
     function findFullHouseRank(
@@ -236,30 +224,20 @@ contract HandEvaluator {
     ) private pure returns (uint32) {
         uint8 threeOfAKind = 0;
         uint8 pair = 0;
-        bool foundTrips = false;
-        bool foundPair = false;
 
-        // Find highest three of a kind
         for (int8 i = 12; i >= 0; i--) {
             if (counts[uint8(i)] == 3) {
                 threeOfAKind = uint8(i);
-                foundTrips = true;
                 break;
             }
         }
 
-        require(foundTrips, 'No three of a kind found');
-
-        // Find highest pair (different from three of a kind)
         for (int8 i = 12; i >= 0; i--) {
             if (counts[uint8(i)] >= 2 && uint8(i) != threeOfAKind) {
                 pair = uint8(i);
-                foundPair = true;
                 break;
             }
         }
-
-        require(foundPair, 'No pair found for full house');
 
         return uint32(threeOfAKind) * 13 + pair;
     }
@@ -270,18 +248,12 @@ contract HandEvaluator {
         uint32 rank = 0;
         uint8 kickers = 0;
         uint8 threeOfAKind = 0;
-        bool foundTrips = false;
 
-        // Look for the highest three of a kind
-        for (int8 i = 12; i >= 0; i--) {
-            if (counts[uint8(i)] == 3) {
-                threeOfAKind = uint8(i);
-                foundTrips = true;
-                break;
+        for (uint8 i = 0; i < 13; i++) {
+            if (counts[i] == 3) {
+                threeOfAKind = i;
             }
         }
-
-        require(foundTrips, 'No three of a kind found');
 
         unchecked {
             rank = uint32(threeOfAKind) * 66;
@@ -305,7 +277,6 @@ contract HandEvaluator {
         uint8 pairCount = 0;
         uint8 kicker = 0;
 
-        // Look for highest two pairs first
         for (int8 i = 12; i >= 0; i--) {
             if (counts[uint8(i)] == 2) {
                 pairs[pairCount] = uint8(i);
@@ -314,7 +285,6 @@ contract HandEvaluator {
             }
         }
 
-        // Then find highest kicker
         for (int8 i = 12; i >= 0; i--) {
             if (counts[uint8(i)] == 1) {
                 kicker = uint8(i);
@@ -333,27 +303,17 @@ contract HandEvaluator {
         uint32 rank = 0;
         uint8 kickers = 0;
         uint8 pair = 0;
-        bool foundPair = false;
 
-        // Look for the highest pair first (starting from highest card)
-        for (int8 i = 12; i >= 0; i--) {
-            if (counts[uint8(i)] == 2) {
-                pair = uint8(i);
-                foundPair = true;
+        for (uint8 i = 0; i < 13; i++) {
+            if (counts[i] == 2) {
+                pair = i;
                 break;
             }
         }
 
-        // If no pair found, handle it gracefully
-        if (!foundPair) {
-            return 0; // This would be an error condition in practice
-        }
-
-        // The multiplier 220 is unchanged from original code
         unchecked {
             rank = uint32(pair) * 220;
 
-            // Add kickers in descending order
             for (int8 i = 12; i >= 0; i--) {
                 if (counts[uint8(i)] == 1) {
                     rank += uint32(kickers) * uint32(uint8(i));

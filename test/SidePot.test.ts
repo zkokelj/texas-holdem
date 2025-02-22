@@ -221,11 +221,11 @@ describe("GameLogic - Simple Side Pot Test", function () {
     const RAISE = 3;
   
     // Player positions for clarity
-    const PLAYER_A = 0; // Will go all-in with smallest stack but best hand (for main pot)
-    const PLAYER_B = 1; // Will have second-best hand (for side pot)
-    const PLAYER_C = 2; // Will have worst hand
-    const PLAYER_D = 3; // Will fold
-    const PLAYER_E = 4; // Will fold
+    const PLAYER_A = 0; // all-in with smallest stack but best hand (for main pot)
+    const PLAYER_B = 1; // second-best hand (for side pot)
+    const PLAYER_C = 2; // worst hand
+    const PLAYER_D = 3; // fold
+    const PLAYER_E = 4; // fold
   
     // Stack sizes
     const SMALL_STACK = 100;   // Player A (all-in player)
@@ -370,87 +370,123 @@ describe("GameLogic - Simple Side Pot Test", function () {
         const player = await stateStorage.getPlayer(players[i].address);
         console.log(`Player ${i} stack: ${player.stack}, status: ${player.status}, currentBet: ${player.currentBet}, contribution: ${player.totalContribution}`);
       }
+
+      const gameStateAfterBetting2 = await stateStorage.getGameState();
+      console.log("Current round after betting2:", gameStateAfterBetting2.currentRound);
+
+      // Player B checks
+      console.log("\nPlayer B checks");
+      await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+
+      // Player C checks
+      console.log("\nPlayer C checks");
+      await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+
+      const gameStateAfterBetting3 = await stateStorage.getGameState();
+      console.log("Current round after betting3:", gameStateAfterBetting3.currentRound);
+
+      // Player B checks
+      console.log("\nPlayer B checks");
+      await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+
+      // Player C checks
+      console.log("\nPlayer C checks");
+      await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+
+      const gameStateAfterBetting4 = await stateStorage.getGameState();
+      console.log("Current round after betting4:", gameStateAfterBetting4.currentRound);
+
+      // Player B checks
+      console.log("\nPlayer B checks");
+      await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+
+      // Player C checks
+      console.log("\nPlayer C checks");
+      await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+
+      const gameStateAfterBetting5 = await stateStorage.getGameState();
+      console.log("Current round after betting5:", gameStateAfterBetting5.currentRound);
   
       // Set up a try-catch block to handle the chain of actions that need to happen
-      try {
-        // If we're still in PreFlop, move to Flop
-        if (gameStateAfterBetting.currentRound === 0) {
-          console.log("\nAttempting to move to Flop");
-          await gameLogic.nextRound();
-          console.log("Successfully moved to Flop");
+    //   try {
+    //     // If we're still in PreFlop, move to Flop
+    //     if (gameStateAfterBetting.currentRound === 0) {
+    //       console.log("\nAttempting to move to Flop");
+    //       await gameLogic.nextRound();
+    //       console.log("Successfully moved to Flop");
           
-          const flop = await stateStorage.getGameState();
-          console.log("Current round after nextRound:", flop.currentRound);
-          console.log("Current turn:", flop.currentTurn);
+    //       const flop = await stateStorage.getGameState();
+    //       console.log("Current round after nextRound:", flop.currentRound);
+    //       console.log("Current turn:", flop.currentTurn);
           
-          // Check who needs to act in this round
-          const playerBTurn = flop.currentTurn === players[PLAYER_B].address;
-          const playerCTurn = flop.currentTurn === players[PLAYER_C].address;
+    //       // Check who needs to act in this round
+    //       const playerBTurn = flop.currentTurn === players[PLAYER_B].address;
+    //       const playerCTurn = flop.currentTurn === players[PLAYER_C].address;
           
-          console.log("Is it Player B's turn?", playerBTurn);
-          console.log("Is it Player C's turn?", playerCTurn);
+    //       console.log("Is it Player B's turn?", playerBTurn);
+    //       console.log("Is it Player C's turn?", playerCTurn);
           
-          // Depending on whose turn it is, have them CHECK
-          if (playerBTurn) {
-            console.log("Player B checks");
-            await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-            console.log("Player C checks");
-            await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-          } else if (playerCTurn) {
-            console.log("Player C checks");
-            await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-            console.log("Player B checks");
-            await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-          }
+    //       // Depending on whose turn it is, have them CHECK
+    //       if (playerBTurn) {
+    //         console.log("Player B checks");
+    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+    //         console.log("Player C checks");
+    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+    //       } else if (playerCTurn) {
+    //         console.log("Player C checks");
+    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+    //         console.log("Player B checks");
+    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+    //       }
           
-          // Move to Turn
-          console.log("\nAttempting to move to Turn");
-          await gameLogic.nextRound();
-          console.log("Successfully moved to Turn");
+    //       // Move to Turn
+    //       console.log("\nAttempting to move to Turn");
+    //       await gameLogic.nextRound();
+    //       console.log("Successfully moved to Turn");
           
-          const turn = await stateStorage.getGameState();
-          console.log("Current round after nextRound:", turn.currentRound);
+    //       const turn = await stateStorage.getGameState();
+    //       console.log("Current round after nextRound:", turn.currentRound);
           
-          // CHECK actions on Turn
-          if (turn.currentTurn === players[PLAYER_B].address) {
-            await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-            await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-          } else {
-            await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-            await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-          }
+    //       // CHECK actions on Turn
+    //       if (turn.currentTurn === players[PLAYER_B].address) {
+    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+    //       } else {
+    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+    //       }
           
-          // Move to River
-          console.log("\nAttempting to move to River");
-          await gameLogic.nextRound();
-          console.log("Successfully moved to River");
+    //       // Move to River
+    //       console.log("\nAttempting to move to River");
+    //       await gameLogic.nextRound();
+    //       console.log("Successfully moved to River");
           
-          const river = await stateStorage.getGameState();
-          console.log("Current round after nextRound:", river.currentRound);
+    //       const river = await stateStorage.getGameState();
+    //       console.log("Current round after nextRound:", river.currentRound);
           
-          // CHECK actions on River
-          if (river.currentTurn === players[PLAYER_B].address) {
-            await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-            await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-          } else {
-            await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-            await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
-          }
+    //       // CHECK actions on River
+    //       if (river.currentTurn === players[PLAYER_B].address) {
+    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+    //       } else {
+    //         await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
+    //         await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
+    //       }
           
-          // Showdown should happen automatically now
-        } else {
-          console.log("Game already progressed past PreFlop - unexpected state");
-        }
-      } catch (error: any) {
-        console.log("Error occurred:", error.message);
+    //       // Showdown should happen automatically now
+    //     } else {
+    //       console.log("Game already progressed past PreFlop - unexpected state");
+    //     }
+    //   } catch (error: any) {
+    //     console.log("Error occurred:", error.message);
         
-        // If error says "Hand complete", it means the showdown already happened
-        if (error.message.includes("Hand complete")) {
-          console.log("Hand is already complete, showdown likely happened automatically");
-        } else {
-          throw error;
-        }
-      }
+    //     // If error says "Hand complete", it means the showdown already happened
+    //     if (error.message.includes("Hand complete")) {
+    //       console.log("Hand is already complete, showdown likely happened automatically");
+    //     } else {
+    //       throw error;
+    //     }
+    //   }
   
       // Log final stacks
       console.log("\nFinal stacks after showdown:");

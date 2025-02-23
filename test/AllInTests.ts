@@ -2,6 +2,13 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
+/**
+ * Tests the basic side pot functionality with 3 players:
+ * - Player A: Normal stack (1000)
+ * - Player B: Small stack (200) - will go all-in
+ * - Player C: Normal stack (1000)
+ * Each player is dealt specific hole cards to create deterministic winning scenarios.
+ */
 describe("GameLogic - Simple Side Pot Test", function () {
   // Contract instances
   let gameLogic: any;
@@ -88,7 +95,21 @@ describe("GameLogic - Simple Side Pot Test", function () {
 
   }
 
-  describe("GameLogic - Complex Side Pot Test", function () {
+  /**
+   * Tests a complex side pot scenario with 5 players:
+   * - Player A: Small stack (100) with best hand (three 8s)
+   * - Player B: Normal stack (1000) with second-best hand (pair of Jacks)
+   * - Player C: Normal stack (1000) with worst hand (2-7 offsuit)
+   * - Player D: Normal stack (1000) - folds
+   * - Player E: Normal stack (1000) - folds
+   * 
+   * The test simulates a betting sequence where:
+   * 1. Player A goes all-in with their small stack
+   * 2. Players B and C continue betting in a side pot
+   * 3. Players D and E fold
+   * 4. Verifies that Player A wins the main pot and Player B wins the side pot
+   */
+  describe("GameLogic - All In side pot split test", function () {
     // Contract instances
     let gameLogic: any;
     let stateStorage: any;
@@ -198,148 +219,72 @@ describe("GameLogic - Simple Side Pot Test", function () {
       }
   
     it("should correctly handle pot distribution with multiple winners", async function () {
+      // Initial stacks logging for debugging
       console.log("----- SIDE POT DISTRIBUTION TEST -----");
       
-      // Log initial stacks
-      console.log("Initial stacks:");
-      for (let i = 0; i < 5; i++) {
-        const player = await stateStorage.getPlayer(players[i].address);
-        console.log(`Player ${i} stack: ${player.stack}`);
-      }
-  
-      // Log initial game state
-      const initialGameState = await stateStorage.getGameState();
-      console.log("\nInitial game state:");
-      console.log("Current turn:", initialGameState.currentTurn);
-      console.log("Current round:", initialGameState.currentRound);
-  
       // Player A (small stack) raises 50
-      console.log("\nPlayer A raises 50");
       await gameLogic.connect(players[PLAYER_A]).processAction(players[PLAYER_A].address, RAISE, 50);
       
       // Player B calls 50
-      console.log("\nPlayer B calls 50");
       await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CALL, 0);
       
       // Player C raises to 150 (100 more than the current bet)
-      console.log("\nPlayer C raises 100 more (to 150 total)");
       await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, RAISE, 100);
       
       // Player D folds
-      console.log("\nPlayer D folds");
       await gameLogic.connect(players[PLAYER_D]).processAction(players[PLAYER_D].address, FOLD, 0);
       
       // Player E folds
-      console.log("\nPlayer E folds");
       await gameLogic.connect(players[PLAYER_E]).processAction(players[PLAYER_E].address, FOLD, 0);
       
       // Player A (small stack) calls, but can only put in their remaining 50 chips (all-in)
-      console.log("\nPlayer A calls but goes all-in");
       await gameLogic.connect(players[PLAYER_A]).processAction(players[PLAYER_A].address, CALL, 0);
       
-      // Check Player A's status - should be all-in
+      // Critical state check after all-in
       const playerAState = await stateStorage.getPlayer(players[PLAYER_A].address);
-      console.log("Player A status after going all-in:", playerAState.status);
-      console.log("Player A stack after going all-in:", playerAState.stack);
-      console.log("Player A currentBet:", playerAState.currentBet);
-      console.log("Player A totalContribution:", playerAState.totalContribution);
+      console.log("Player A status after all-in:", playerAState.status);
+      console.log("Player A stack after all-in:", playerAState.stack);
       
       // Player B calls 100 more
-      console.log("\nPlayer B calls to 150");
       await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CALL, 0);
       
-      // Log stack status after betting
-      console.log("\nStacks after betting:");
-      const gameStateAfterBetting = await stateStorage.getGameState();
-      console.log(`Main pot: ${gameStateAfterBetting.mainPot}`);
-      console.log(`Current round: ${gameStateAfterBetting.currentRound}`);
-      console.log(`Current bet: ${gameStateAfterBetting.currentBet}`);
-      console.log(`Current turn: ${gameStateAfterBetting.currentTurn}`);
-      
-      for (let i = 0; i < 5; i++) {
-        const player = await stateStorage.getPlayer(players[i].address);
-        console.log(`Player ${i} stack: ${player.stack}, status: ${player.status}, currentBet: ${player.currentBet}, contribution: ${player.totalContribution}`);
-      }
-
-      const gameStateAfterBetting2 = await stateStorage.getGameState();
-      console.log("Current round after betting2:", gameStateAfterBetting2.currentRound);
-
       // Player B checks
-      console.log("\nPlayer B checks");
       await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
 
       // Player C checks
-      console.log("\nPlayer C checks");
       await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
 
-      const gameStateAfterBetting3 = await stateStorage.getGameState();
-      console.log("Current round after betting3:", gameStateAfterBetting3.currentRound);
-
       // Player B checks
-      console.log("\nPlayer B checks");
       await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
 
       // Player C checks
-      console.log("\nPlayer C checks");
       await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-
-      const gameStateAfterBetting4 = await stateStorage.getGameState();
-      console.log("Current round after betting4:", gameStateAfterBetting4.currentRound);
 
       // Set community cards right before final round:
       // 8♠, Q♦, 6♣, 5♠, A♦
       await stateStorage.connect(owner).updateGameCards([45, 24, 37, 42, 10]);
 
       // Player B checks
-      console.log("\nPlayer B checks");
       await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, CHECK, 0);
 
       // Player C checks
-      console.log("\nPlayer C checks");
       await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, CHECK, 0);
-
-      const gameStateAfterBetting5 = await stateStorage.getGameState();
-      console.log("Current round after betting5:", gameStateAfterBetting5.currentRound);
-  
-      // Log final stacks
-      console.log("\nFinal stacks after showdown:");
-      for (let i = 0; i < 5; i++) {
-        const player = await stateStorage.getPlayer(players[i].address);
-        console.log(`Player ${i} stack: ${player.stack}`);
-      }
       
-      // Get the final player states
+      // Get the final player states for verification
       const playerAFinal = await stateStorage.getPlayer(players[PLAYER_A].address);
       const playerBFinal = await stateStorage.getPlayer(players[PLAYER_B].address);
       const playerCFinal = await stateStorage.getPlayer(players[PLAYER_C].address);
       
-      console.log("\nDetailed final states:");
-      console.log(`Player A: stack=${playerAFinal.stack}, contribution=${playerAFinal.totalContribution}`);
-      console.log(`Player B: stack=${playerBFinal.stack}, contribution=${playerBFinal.totalContribution}`);
-      console.log(`Player C: stack=${playerCFinal.stack}, contribution=${playerCFinal.totalContribution}`);
-      
-      // Calculate total pot
-      const totalPot = playerAFinal.totalContribution + playerBFinal.totalContribution + playerCFinal.totalContribution;
-      console.log(`Total pot based on contributions: ${totalPot}`);
-      
       // Calculate expected outcomes - convert to BigInt
-      const mainPotSize = BigInt(Number(playerAFinal.currentBet)) * BigInt(3); // 3 players contributing up to Player A's all-in amount
-      const sidePotSize = BigInt(Number(playerBFinal.currentBet - playerAFinal.currentBet)) * BigInt(2); // Extra amount beyond all-in from 2 players
+      const mainPotSize = BigInt(Number(playerAFinal.currentBet)) * BigInt(3);
+      const sidePotSize = BigInt(Number(playerBFinal.currentBet - playerAFinal.currentBet)) * BigInt(2);
       
-      console.log(`Expected main pot: ${mainPotSize}`);
-      console.log(`Expected side pot: ${sidePotSize}`);
-      
-      // Expected outcomes:
-      // 1. Player A should win the main pot (3 players × A's all-in amount)
-      // 2. Player B should win the side pot (2 players × additional amount beyond A's all-in)
-      // 3. Player C should lose their contribution
-      
-      // Basic assertions - should be true in any correct implementation
+      // Verify the outcomes
       expect(playerAFinal.stack).to.be.greaterThan(BigInt(0), "Player A should have won something (the main pot)");
       expect(playerBFinal.stack).to.be.greaterThan(BigInt(NORMAL_STACK - 150), "Player B should have more than just their remaining chips");
       expect(playerCFinal.stack).to.be.lessThan(BigInt(NORMAL_STACK), "Player C should have lost their contribution");
 
-      // Also verify the total pot is empty
+      // Verify the total pot is empty at the end
       const finalGameState = await stateStorage.getGameState();
       expect(finalGameState.mainPot).to.equal(BigInt(0));
     });

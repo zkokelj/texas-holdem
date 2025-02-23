@@ -290,3 +290,181 @@ describe("GameLogic - Simple Side Pot Test", function () {
     });
   });
 });
+
+/**
+ * Tests the double all-in scenario with proper pot distribution in Texas Hold'em rules.
+ * 
+ * Test scenario:
+ * - Player A: 100 chips (tiny stack), Pocket Aces (best hand)
+ * - Player B: 200 chips (small stack), Pocket Kings (second-best hand)
+ * - Players C, D, E: 1000 chips each, low cards (all fold)
+ * 
+ * Betting sequence:
+ * 1. Player A goes all-in with 100 chips
+ * 2. Player B raises all-in to 200 chips
+ * 3. Players C, D, and E fold
+ * 
+ * Expected pot distribution according to Texas Hold'em rules:
+ * - Main pot: 200 chips (100 from A + 100 from B)
+ * - Side pot: 100 chips (B's extra 100 that A couldn't match)
+ * 
+ * Final outcome:
+ * - Player A wins main pot of 200 chips (wins what they could match)
+ * - Player B keeps their unmatched 100 chips (the portion A couldn't call)
+ * - Other players lose nothing (folded before committing chips)
+ * 
+ * This illustrates a key Texas Hold'em rule: players can only win from 
+ * each opponent up to the amount they put at risk. When going all-in for 100,
+ * you can't win more than 100 from each opponent, even if they bet more.
+ */
+describe("GameLogic - Double All-In Test", function () {
+  // Contract instances and constants remain the same...
+  let gameLogic: any;
+  let stateStorage: any;
+  let handManager: any;
+  let handEvaluator: any;
+  let owner: SignerWithAddress;
+  let players: SignerWithAddress[];
+
+  // Action constants
+  const FOLD = 0;
+  const CHECK = 1;
+  const CALL = 2;
+  const RAISE = 3;
+
+  // Player positions
+  const PLAYER_A = 0; // Small stack (100), best hand
+  const PLAYER_B = 1; // Medium stack (200), second-best hand
+  const PLAYER_C = 2; // Normal stack (1000), will fold
+  const PLAYER_D = 3; // Normal stack (1000), will fold
+  const PLAYER_E = 4; // Normal stack (1000), will fold
+
+  // Stack sizes
+  const TINY_STACK = 100;    // Player A
+  const SMALL_STACK = 200;   // Player B
+  const NORMAL_STACK = 1000; // Other players
+
+  beforeEach(async function () {
+    // Deploy contracts
+    [owner, ...players] = await ethers.getSigners();
+
+    const StateStorage = await ethers.getContractFactory("StateStorage");
+    stateStorage = await (await StateStorage.connect(owner).deploy()).waitForDeployment();
+
+    const HandManager = await ethers.getContractFactory("HandManager");
+    handManager = await (await HandManager.connect(owner).deploy(await stateStorage.getAddress())).waitForDeployment();
+
+    const HandEvaluator = await ethers.getContractFactory("HandEvaluator");
+    handEvaluator = await (await HandEvaluator.connect(owner).deploy()).waitForDeployment();
+
+    const GameLogic = await ethers.getContractFactory("GameLogic");
+    gameLogic = await (await GameLogic.connect(owner).deploy(
+      await stateStorage.getAddress(),
+      await handManager.getAddress(),
+      await handEvaluator.getAddress()
+    )).waitForDeployment();
+
+    // Set permissions
+    await stateStorage.connect(owner).authorizeContract(await gameLogic.getAddress());
+    await stateStorage.connect(owner).authorizeContract(await handManager.getAddress());
+    await stateStorage.connect(owner).authorizeContract(owner.address);
+
+    await setupFivePlayerGame();
+  });
+
+  async function setupFivePlayerGame() {
+    // Set up five players with specified stacks and hole cards
+    for (let i = 0; i < 5; i++) {
+      // Assign stacks based on position
+      let stack;
+      if (i === PLAYER_A) {
+        stack = TINY_STACK;   // Player A gets tiny stack
+      } else if (i === PLAYER_B) {
+        stack = SMALL_STACK;  // Player B gets small stack
+      } else {
+        stack = NORMAL_STACK; // Others get normal stack
+      }
+
+      // Card assignments to create specific winning scenarios:
+      let holeCards;
+      if (i === PLAYER_A) {
+        // Player A: Pocket Aces for best hand
+        holeCards = [12, 25]; // A♣, A♦
+      } else if (i === PLAYER_B) {
+        // Player B: Pocket Kings for second-best hand
+        holeCards = [11, 24]; // K♣, K♦
+      } else {
+        // Other players: Low cards (will fold)
+        holeCards = [i * 2, i * 2 + 1];
+      }
+
+      await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+        stack: stack,
+        status: 1, // Active
+        currentBet: 0,
+        position: i,
+        holeCards: holeCards,
+        lastActionTime: 0,
+        totalContribution: 0
+      });
+    }
+
+    // Initialize game state at PreFlop
+    await stateStorage.connect(owner).updateGameBasics(
+      0, // PreFlop round
+      0, // Empty pot
+      0, // No bet
+      players[PLAYER_A].address // Player A starts
+    );
+
+    // Set community cards that won't interfere with pocket pairs
+    await stateStorage.connect(owner).updateGameCards([45, 46, 47, 42, 43]);
+    // 8♠, 9♠, T♠, 5♠, 6♠
+  }
+
+  it("should correctly handle double all-in with folds", async function () {
+    console.log("----- DOUBLE ALL-IN WITH FOLDS TEST -----");
+
+    // Log initial stacks
+    console.log("\nInitial stacks:");
+    for (let i = 0; i < 5; i++) {
+      const player = await stateStorage.getPlayer(players[i].address);
+      console.log(`Player ${i} stack: ${player.stack}`);
+    }
+
+    // Player A (tiny stack) goes all-in with 100
+    console.log("\nPlayer A goes all-in with 100");
+    await gameLogic.connect(players[PLAYER_A]).processAction(players[PLAYER_A].address, RAISE, 100);
+
+    // Player B (small stack) raises all-in to 200
+    console.log("\nPlayer B raises all-in to 200");
+    await gameLogic.connect(players[PLAYER_B]).processAction(players[PLAYER_B].address, RAISE, 100);
+
+    // Other players fold
+    console.log("\nPlayers C, D, and E fold");
+    await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, FOLD, 0);
+    await gameLogic.connect(players[PLAYER_D]).processAction(players[PLAYER_D].address, FOLD, 0);
+    await gameLogic.connect(players[PLAYER_E]).processAction(players[PLAYER_E].address, FOLD, 0);
+
+    // Log final state
+    const playerAFinal = await stateStorage.getPlayer(players[PLAYER_A].address);
+    const playerBFinal = await stateStorage.getPlayer(players[PLAYER_B].address);
+
+    console.log("\nFinal stacks:");
+    console.log(`Player A final stack: ${playerAFinal.stack}`);
+    console.log(`Player B final stack: ${playerBFinal.stack}`);
+
+    // Correct pot distribution according to Texas Hold'em rules:
+    // - Main pot: 200 (100 from each player)
+    // - Side pot: 100 (B's extra 100 that A couldn't match)
+    // Since Player A has better hand (Aces vs Kings):
+    // - Player A wins main pot (200)
+    // - Player B keeps their side pot (100)
+    expect(playerAFinal.stack).to.be.equal(BigInt(200), "Player A should win the main pot (200)");
+    expect(playerBFinal.stack).to.be.equal(BigInt(100), "Player B should keep their unmatched chips (100)");
+
+    // Verify pots are empty
+    const finalGameState = await stateStorage.getGameState();
+    expect(finalGameState.mainPot).to.equal(BigInt(0), "Main pot should be empty after distribution");
+  });
+});

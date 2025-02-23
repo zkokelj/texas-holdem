@@ -408,12 +408,8 @@ describe("GameLogic - Simple Side Pot Test", function () {
       console.log("Current round after betting4:", gameStateAfterBetting4.currentRound);
 
       // Set community cards right before final round:
-      // 8♠ (45) - gives Player A three of a kind (different suit from Player A's 8s)
-      // K♠ (50) - high card
-      // A♠ (51) - high card
-      // 5♠ (42) - irrelevant
-      // T♠ (47) - irrelevant
-      await stateStorage.connect(owner).updateGameCards([45, 50, 51, 42, 47]);
+      // 8♠, Q♦, 6♣, 5♠, A♦
+      await stateStorage.connect(owner).updateGameCards([45, 24, 37, 42, 10]);
 
       // Player B checks
       console.log("\nPlayer B checks");

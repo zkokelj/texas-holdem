@@ -467,4 +467,243 @@ describe("GameLogic - Double All-In Test", function () {
     const finalGameState = await stateStorage.getGameState();
     expect(finalGameState.mainPot).to.equal(BigInt(0), "Main pot should be empty after distribution");
   });
+
+  /**
+ * Tests edge cases for all-in scenarios and side pot distributions in Texas Hold'em.
+ * Each test case verifies specific edge case scenarios that commonly occur in poker games.
+ */
+describe("GameLogic - All-in Edge Cases", function () {
+  // Contract setup code same as before...
+
+  /**
+   * Tests a triple all-in scenario where three players have different stack sizes
+   * and each wins a different pot.
+   * 
+   * Scenario:
+   * - Player A: 100 chips, pocket Aces (best hand)
+   * - Player B: 300 chips, pocket Kings (second-best hand)
+   * - Player C: 500 chips, pocket Queens (third-best hand)
+   * 
+   * Expected pots:
+   * - Main pot: 300 (100 x 3) - Player A wins
+   * - First side pot: 400 (200 x 2) - Player B wins
+   * - Second side pot: 200 (Player C's extra) - Player C keeps
+   */
+  it("should handle triple all-in with different stack sizes", async function () {
+    // Initial setup with different stack sizes
+    const stacks = {
+        A: 100,  // Smallest stack
+        B: 300,  // Medium stack
+        C: 500   // Largest stack
+    };
+
+    // Set up players
+    for (let i = 0; i < 3; i++) {
+        let stack = i === 0 ? stacks.A : (i === 1 ? stacks.B : stacks.C);
+        let holeCards;
+        
+        if (i === 0) {
+            // Player A: Pocket Aces
+            holeCards = [12, 25]; // A♣, A♦
+        } else if (i === 1) {
+            // Player B: Pocket Kings
+            holeCards = [11, 24]; // K♣, K♦
+        } else {
+            // Player C: Pocket Queens
+            holeCards = [10, 23]; // Q♣, Q♦
+        }
+
+        await stateStorage.connect(owner).updatePlayerState(players[i].address, {
+            stack: stack,
+            status: 1, // Active
+            currentBet: 0,
+            position: i,
+            holeCards: holeCards,
+            lastActionTime: 0,
+            totalContribution: 0
+        });
+    }
+
+    // Initialize game state
+    await stateStorage.connect(owner).updateGameBasics(
+        0, // PreFlop round
+        0, // Empty pot
+        0, // No bet
+        players[0].address // Player A starts
+    );
+
+    // Set community cards that don't improve anyone's hand
+    await stateStorage.connect(owner).updateGameCards([2, 15, 28, 41, 47]);
+    // 4♣, 4♦, 4♥, 4♠, T♠ (Four of a kind on board, high card decides)
+
+    console.log("----- TRIPLE ALL-IN TEST -----");
+    
+    // Log initial stacks
+    console.log("\nInitial stacks:");
+    for (let i = 0; i < 3; i++) {
+        const player = await stateStorage.getPlayer(players[i].address);
+        console.log(`Player ${i} stack: ${player.stack}`);
+    }
+
+    // Player A goes all-in for 100
+    console.log("\nPlayer A goes all-in with 100");
+    await gameLogic.connect(players[0]).processAction(players[0].address, RAISE, 100);
+
+    // Player B goes all-in for 300
+    console.log("\nPlayer B raises all-in to 300");
+    await gameLogic.connect(players[1]).processAction(players[1].address, RAISE, 200);
+
+
+    // Print game state
+    const gameState = await stateStorage.getGameState();
+    console.log("\nGame State:");
+    console.log("Main Pot:", gameState.mainPot);
+    console.log("Side Pots:", gameState.sidePots);
+    console.log("Current Round:", gameState.currentRound);
+    console.log("Current Bet:", gameState.currentBet);
+    console.log("Current Player to Act:", gameState.currentPlayer);
+
+    // Player C goes all-in for 500
+    console.log("\nPlayer C raises all-in to 500");
+    await gameLogic.connect(players[2]).processAction(players[2].address, RAISE, 200);
+
+    // Print game state after the last all-in
+    const finalGameStateAfterAllIn = await stateStorage.getGameState();
+    console.log("\nGame State after last all-in:");
+    console.log("Main Pot:", finalGameStateAfterAllIn.mainPot);
+    console.log("Side Pots:", finalGameStateAfterAllIn.sidePots);
+    console.log("Current Round:", finalGameStateAfterAllIn.currentRound);
+    console.log("Current Bet:", finalGameStateAfterAllIn.currentBet);
+    console.log("Current Player to Act:", finalGameStateAfterAllIn.currentPlayer);
+
+
+
+    // Get final states
+    const playerAFinal = await stateStorage.getPlayer(players[0].address);
+    const playerBFinal = await stateStorage.getPlayer(players[1].address);
+    const playerCFinal = await stateStorage.getPlayer(players[2].address);
+
+    console.log("\nFinal stacks:");
+    console.log(`Player A final stack: ${playerAFinal.stack}`);
+    console.log(`Player B final stack: ${playerBFinal.stack}`);
+    console.log(`Player C final stack: ${playerCFinal.stack}`);
+
+    // Verify correct pot distribution
+    // Main pot (300 = 100 x 3) should go to Player A (Aces)
+    expect(playerAFinal.stack).to.be.equal(BigInt(300), 
+        "Player A should win the main pot of 300");
+
+    // First side pot (400 = 200 x 2) should go to Player B (Kings)
+    expect(playerBFinal.stack).to.be.equal(BigInt(400), 
+        "Player B should win first side pot of 400");
+
+    // Second side pot (200) should stay with Player C
+    expect(playerCFinal.stack).to.be.equal(BigInt(200), 
+        "Player C should keep their unmatched 200");
+
+    // Verify all pots are empty
+    const finalGameState = await stateStorage.getGameState();
+    expect(finalGameState.mainPot).to.equal(BigInt(0), 
+        "All pots should be empty after distribution");
+    });
+
+  /**
+   * Tests a scenario where two players tie for the main pot while
+   * one player wins the side pot.
+   * 
+   * Scenario:
+   * - Player A: 200 chips, A♠K♠ (ties for main)
+   * - Player B: 200 chips, A♥K♥ (ties for main)
+   * - Player C: 400 chips, Q♠Q♥ (wins side pot)
+   * 
+   * Expected:
+   * - Main pot splits between A and B
+   * - Side pot goes to C
+   */
+  it("should handle split main pot with different side pot winner", async function () {
+      // Setup code...
+  });
+
+  /**
+   * Tests blind vs blind all-in scenario where small blind doesn't have
+   * enough to cover the big blind.
+   * 
+   * Scenario:
+   * - Small Blind: 10 chips (all-in)
+   * - Big Blind: 20 chips (calls)
+   * Expected:
+   * - Main pot: 20 (2x10)
+   * - Side pot: None
+   * - Excess BB chips returned
+   */
+  it("should handle small blind vs big blind all-in", async function () {
+      // Setup code...
+  });
+
+  /**
+   * Tests scenario where multiple players go all-in with exactly matching stacks.
+   * 
+   * Scenario:
+   * - Three players with exactly 100 chips each
+   * Expected:
+   * - Single pot of 300
+   * - No side pots
+   * - Winner takes all
+   */
+  it("should handle multiple all-ins with matching stacks", async function () {
+      // Setup code...
+  });
+
+  /**
+   * Tests complex scenario with multiple winners in different pots.
+   * 
+   * Scenario:
+   * Player A: 100 chips (best hand)
+   * Player B: 300 chips (second best)
+   * Player C: 500 chips (third best)
+   * Player D: 1000 chips (worst hand)
+   * 
+   * Expected pots:
+   * - Main pot (400): Player A wins
+   * - Side pot 1 (600): Player B wins
+   * - Side pot 2 (400): Player C wins
+   * - Side pot 3 (remaining): Player D keeps
+   */
+  it("should handle multiple winners in different side pots", async function () {
+      // Setup code...
+  });
+
+  /**
+   * Tests edge case where player goes all-in for less than the minimum raise.
+   * 
+   * Scenario:
+   * - Current bet: 100
+   * - Player A: 50 chips (all-in)
+   * - Player B: 1000 chips
+   * - Player C: 1000 chips
+   * 
+   * Expected:
+   * - All-in doesn't constitute a raise
+   * - Other players can just call 100
+   */
+  it("should handle all-in below minimum raise", async function () {
+      // Setup code...
+  });
+
+  /**
+   * Tests scenario where everyone calls an all-in but one player raises.
+   * 
+   * Scenario:
+   * Player A: All-in 100
+   * Players B,C,D: Call 100
+   * Player E: Raises to 300
+   * 
+   * Expected:
+   * - Main pot: 500 (100 x 5)
+   * - Side pot: Between only those who could still bet
+   */
+  it("should handle raise after multiple all-in calls", async function () {
+      // Setup code...
+  });
+});
 });

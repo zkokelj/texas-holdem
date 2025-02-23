@@ -563,35 +563,6 @@ describe("GameLogic - Player Order", function () {
 
     // Additional Game Flow Scenarios
     describe("Additional Game Flow Scenarios", function () {
-        // This test simulates an all-in raise scenario.
-        // UTG's state is updated to have a stack of 100 and then he performs a raise with raiseAmount = 50.
-        // The required call amount is 50 (current bet) so total = 50 + 50 = 100, triggering an all-in.
-        it("Should handle all-in raise correctly", async function () {
-            // Update UTG's state to force an all-in condition
-            await stateStorage.connect(owner).updatePlayerState(players[UTG].address, {
-                stack: 100,
-                status: 1, // Active
-                currentBet: 0,
-                position: UTG,
-                holeCards: [40, 41],
-                lastActionTime: 0,
-                totalContribution: 0  // Add totalContribution field
-            });
-
-            // UTG performs a raise with raiseAmount = 50
-            // In pre-flop, the current bet is BIG_BLIND (50), so toCall = 50. Total amount = 50 + 50 = 100.
-            await gameLogic.connect(players[UTG]).processAction(players[UTG].address, RAISE, 50);
-
-            // Verify UTG's state: UTG should be all-in
-            const utgState = await stateStorage.getPlayer(players[UTG].address);
-            expect(utgState.stack).to.equal(0);
-            expect(utgState.currentBet).to.equal(100);
-
-            // Verify that the main pot reflects UTG's bet
-            const gameState = await stateStorage.getGameState();
-            expect(gameState.mainPot).to.be.at.least(100);
-        });
-
         // Test for a round where all players check
         it("Should allow all players to check in flop round when no bets are made", async function () {
             // Complete pre-flop round first

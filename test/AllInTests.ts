@@ -417,9 +417,6 @@ describe("GameLogic - Double All-In Test", function () {
       players[PLAYER_A].address // Player A starts
     );
 
-    // Set community cards that won't interfere with pocket pairs
-    await stateStorage.connect(owner).updateGameCards([45, 46, 47, 42, 43]);
-    // 8♠, 9♠, T♠, 5♠, 6♠
   }
 
   it("should correctly handle double all-in with folds", async function () {
@@ -535,6 +532,9 @@ describe("GameLogic - Double All-In Test", function () {
     console.log("Player D fold")
     await gameLogic.connect(players[PLAYER_D]).processAction(players[PLAYER_D].address, FOLD, 0);
     console.log("Player E fold")
+    // Use 2♣, 3♥, 4♦, 5♣, 7♥
+    await stateStorage.connect(owner).updateGameCards([2, 16, 30, 5, 20]);
+
     await gameLogic.connect(players[PLAYER_E]).processAction(players[PLAYER_E].address, FOLD, 0);
 
     // Log final state

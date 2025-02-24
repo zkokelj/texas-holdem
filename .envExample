@@ -1,0 +1,3 @@
+# Network
+TEN_RPC_URL=your_ten_network_rpc_url_here
+PRIVATE_KEY=your_wallet_private_key_here

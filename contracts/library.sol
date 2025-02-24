@@ -46,7 +46,7 @@ library PokerConstants {
 
 library DeckManager {
     using PokerConstants for uint8;
-    
+
     struct Deck {
         uint8[52] cards;
         uint8 currentIndex;
@@ -58,7 +58,7 @@ library DeckManager {
 
     function initializeDeck() internal pure returns (Deck memory) {
         Deck memory deck;
-        for(uint8 i = 0; i < PokerConstants.DECK_SIZE; i++) {
+        for (uint8 i = 0; i < PokerConstants.DECK_SIZE; i++) {
             deck.cards[i] = i;
         }
         deck.currentIndex = 0;
@@ -67,37 +67,52 @@ library DeckManager {
 
     function shuffle(Deck storage deck) internal {
         // Use TEN's block.difficulty as secure RNG source
-        bytes32 seed = bytes32(block.difficulty);
+        // TODO: ZIGA - double check if we should use block.prevrandao or block.difficulty in TEN and what is the difference.
+        bytes32 seed = bytes32(block.prevrandao);
         deck.lastSeed = seed;
         emit ShuffleInitiated(seed);
 
-        for(uint8 i = PokerConstants.DECK_SIZE - 1; i > 0; i--) {
+        for (uint8 i = PokerConstants.DECK_SIZE - 1; i > 0; i--) {
             // Use seed to generate random index
-            uint8 j = uint8(uint256(keccak256(abi.encodePacked(seed, i))) % (i + 1));
+            uint8 j = uint8(
+                uint256(keccak256(abi.encodePacked(seed, i))) % (i + 1)
+            );
             // Swap cards
             (deck.cards[i], deck.cards[j]) = (deck.cards[j], deck.cards[i]);
         }
         deck.currentIndex = 0;
     }
 
-    function dealCard(Deck storage deck, uint8 position) internal returns (uint8) {
-        require(deck.currentIndex < PokerConstants.DECK_SIZE, "No cards left in deck");
+    function dealCard(
+        Deck storage deck,
+        uint8 position
+    ) internal returns (uint8) {
+        require(
+            deck.currentIndex < PokerConstants.DECK_SIZE,
+            'No cards left in deck'
+        );
         uint8 card = deck.cards[deck.currentIndex];
         deck.currentIndex++;
         emit CardDealt(position, card);
         return card;
     }
 
-    function dealHoleCards(Deck storage deck, uint8 playerPosition) internal returns (uint8[2] memory) {
+    function dealHoleCards(
+        Deck storage deck,
+        uint8 playerPosition
+    ) internal returns (uint8[2] memory) {
         uint8[2] memory cards;
         cards[0] = dealCard(deck, playerPosition);
         cards[1] = dealCard(deck, playerPosition);
         return cards;
     }
 
-    function dealCommunityCards(Deck storage deck, uint8 count) internal returns (uint8[] memory) {
+    function dealCommunityCards(
+        Deck storage deck,
+        uint8 count
+    ) internal returns (uint8[] memory) {
         uint8[] memory cards = new uint8[](count);
-        for(uint8 i = 0; i < count; i++) {
+        for (uint8 i = 0; i < count; i++) {
             cards[i] = dealCard(deck, type(uint8).max); // max value indicates community card
         }
         return cards;
@@ -145,7 +160,9 @@ library SecurityManager {
         address player,
         uint8 cardPosition
     ) internal view returns (bool) {
-        return visibility.canSeeCard[player][cardPosition] || visibility.isRevealed[cardPosition];
+        return
+            visibility.canSeeCard[player][cardPosition] ||
+            visibility.isRevealed[cardPosition];
     }
 
     function revealHand(
@@ -163,7 +180,7 @@ library SecurityManager {
         address player,
         uint8 position
     ) internal {
-        require(!visibility.isRevealed[position], "Card already revealed");
+        require(!visibility.isRevealed[position], 'Card already revealed');
         emit CardRevealRequested(player, position);
     }
 }

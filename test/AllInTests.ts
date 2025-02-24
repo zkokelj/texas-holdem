@@ -530,8 +530,11 @@ describe("GameLogic - Double All-In Test", function () {
 
     // Other players fold
     console.log("\nPlayers C, D, and E fold");
+    console.log("Player C fold")
     await gameLogic.connect(players[PLAYER_C]).processAction(players[PLAYER_C].address, FOLD, 0);
+    console.log("Player D fold")
     await gameLogic.connect(players[PLAYER_D]).processAction(players[PLAYER_D].address, FOLD, 0);
+    console.log("Player E fold")
     await gameLogic.connect(players[PLAYER_E]).processAction(players[PLAYER_E].address, FOLD, 0);
 
     // Log final state

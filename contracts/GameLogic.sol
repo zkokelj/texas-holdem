@@ -395,51 +395,48 @@ contract GameLogic is IGameLogic {
      */
     function _moveToNextPlayer() private {
         (uint8 activeCount, uint8 allInCount) = _getPlayerStatusCounts();
+        console.log('\n=== Moving to Next Player ===');
+        console.log('Active players:', activeCount);
+        console.log('All-in players:', allInCount);
 
-        // Case 1: Only one player remains (everyone else folded)
+        // Case 1: Only one player remains with no all-ins (instant win)
         if (activeCount == 1 && allInCount == 0) {
+            console.log('Only one active player, no all-ins - awarding pot');
             _awardPotToLastPlayer();
             return;
         }
 
-        // Case 2: No active players remain, but multiple all-in players
-        if (activeCount == 0 && allInCount >= 2) {
-            // Progress through remaining rounds if all players are all-in
-            IStateStorage.GameState memory gameState = stateStorage
-                .getGameState();
-            while (gameState.currentRound < IStateStorage.BettingRound.River) {
-                _nextRound();
-                gameState = stateStorage.getGameState();
-            }
-            _handleShowdown();
-            return;
-        }
-
-        // Case 3: One active player remains with all-in players
-        if (activeCount == 1 && allInCount >= 1) {
-            // Progress through remaining rounds if one active and some all-ins
-            IStateStorage.GameState memory gameState = stateStorage
-                .getGameState();
-            while (gameState.currentRound < IStateStorage.BettingRound.River) {
-                _nextRound();
-                gameState = stateStorage.getGameState();
-            }
-            _handleShowdown();
-            return;
-        }
-
-        // Case 4: Normal case - check if round is complete
+        // Case 2: Normal case (includes all-in situations)
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         bool roundComplete = _isRoundComplete();
+        console.log('Round complete?', roundComplete);
 
         if (roundComplete) {
             if (_shouldShowdown()) {
+                // If we're not at River yet but everyone is all-in/folded,
+                // progress through remaining rounds first
+                if (gameState.currentRound < IStateStorage.BettingRound.River) {
+                    console.log(
+                        'Progressing through remaining rounds before showdown'
+                    );
+                    while (
+                        gameState.currentRound <
+                        IStateStorage.BettingRound.River
+                    ) {
+                        _nextRound();
+                        gameState = stateStorage.getGameState();
+                    }
+                }
+                console.log('Round complete and showdown conditions met');
                 _handleShowdown();
             } else {
+                console.log('Round complete, moving to next round');
                 _nextRound();
             }
         } else {
+            // Round not complete, move to next player
             address nextPlayer = _getNextActivePlayer(gameState.currentTurn);
+            console.log('Round continuing, next player:', nextPlayer);
             gameState.currentTurn = nextPlayer;
             stateStorage.updateGameState(gameState);
             emit ActionTimerStarted(
@@ -458,6 +455,7 @@ contract GameLogic is IGameLogic {
 
         if (_isRoundComplete()) {
             if (_shouldShowdown()) {
+                console.log('HANDLE SHOWDOWN TRIGGERED FROM UPDATE_GAME_STATE');
                 _handleShowdown();
             } else {
                 emit RoundComplete(gameState.currentRound);
@@ -986,6 +984,7 @@ contract GameLogic is IGameLogic {
             }
         }
 
+        console.log('WE ARE IN HANDLE SHOWDOWN!');
         // Distribute pots
         _distributePots();
 
@@ -997,6 +996,7 @@ contract GameLogic is IGameLogic {
      * @dev Resets the game state for a new hand
      */
     function _resetGameState() private {
+        console.log('RESET THE GAME STATE!');
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
 
         gameState.currentRound = IStateStorage.BettingRound.PreFlop;

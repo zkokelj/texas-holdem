@@ -159,26 +159,6 @@ contract GameLogic is IGameLogic {
 
         stateStorage.updatePlayerState(player, playerState);
 
-        (uint8 activeCount, uint8 allInCount) = _getPlayerStatusCounts();
-
-        // Case 1: Only one player remains (everyone else folded)
-        if (activeCount == 1 && allInCount == 0) {
-            _awardPotToLastPlayer();
-            return;
-        }
-
-        // Case 2: No active players remain, but multiple all-in players
-        if (activeCount == 0 && allInCount >= 2) {
-            _handleShowdown();
-            return;
-        }
-
-        // Case 3: One active player remains with all-in players
-        if (activeCount == 1 && allInCount >= 1) {
-            _handleShowdown();
-            return;
-        }
-
         // Case 4: Normal case - continue to next player
         _moveToNextPlayer();
     }
@@ -399,22 +379,45 @@ contract GameLogic is IGameLogic {
     /**
      * @dev Moves the action to the next active player
      */
+    /**
+     * @dev Moves the action to the next active player
+     */
     function _moveToNextPlayer() private {
         (uint8 activeCount, uint8 allInCount) = _getPlayerStatusCounts();
 
-        // If no active players remain but we have all-in players, go to showdown
+        // Case 1: Only one player remains (everyone else folded)
+        if (activeCount == 1 && allInCount == 0) {
+            _awardPotToLastPlayer();
+            return;
+        }
+
+        // Case 2: No active players remain, but multiple all-in players
         if (activeCount == 0 && allInCount >= 2) {
+            // Progress through remaining rounds if all players are all-in
+            IStateStorage.GameState memory gameState = stateStorage
+                .getGameState();
+            while (gameState.currentRound < IStateStorage.BettingRound.River) {
+                _nextRound();
+                gameState = stateStorage.getGameState();
+            }
             _handleShowdown();
             return;
         }
 
-        // If one active player remains with all-in players, go to showdown
+        // Case 3: One active player remains with all-in players
         if (activeCount == 1 && allInCount >= 1) {
+            // Progress through remaining rounds if one active and some all-ins
+            IStateStorage.GameState memory gameState = stateStorage
+                .getGameState();
+            while (gameState.currentRound < IStateStorage.BettingRound.River) {
+                _nextRound();
+                gameState = stateStorage.getGameState();
+            }
             _handleShowdown();
             return;
         }
 
-        // Otherwise proceed as normal
+        // Case 4: Normal case - check if round is complete
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         bool roundComplete = _isRoundComplete();
 

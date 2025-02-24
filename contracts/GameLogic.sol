@@ -317,6 +317,9 @@ contract GameLogic is IGameLogic {
     /**
      * @dev Moves the game to the next betting round
      */
+    /**
+     * @dev Moves the game to the next betting round
+     */
     function _nextRound() private {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
 
@@ -343,18 +346,26 @@ contract GameLogic is IGameLogic {
         gameState.currentBet = 0;
         gameState.lastRaise = 0;
 
-        // Set the current turn to the next active player
-        address sbPlayer = stateStorage.getPlayerAtPosition(1);
-        if (gameState.currentRound >= IStateStorage.BettingRound.PreFlop) {
-            gameState.currentTurn = sbPlayer != address(0)
-                ? _getNextActivePlayer(stateStorage.getPlayerAtPosition(0))
-                : _getNextActivePlayer(address(0));
+        // Check if we have any active players
+        (uint8 activeCount, uint8 allInCount) = _getPlayerStatusCounts();
+
+        // Only try to find next active player if there are active players
+        if (activeCount > 0) {
+            // Set the current turn to the next active player
+            address sbPlayer = stateStorage.getPlayerAtPosition(1);
+            if (gameState.currentRound >= IStateStorage.BettingRound.PreFlop) {
+                gameState.currentTurn = sbPlayer != address(0)
+                    ? _getNextActivePlayer(stateStorage.getPlayerAtPosition(0))
+                    : _getNextActivePlayer(address(0));
+            } else {
+                gameState.currentTurn = _getNextActivePlayer(address(0));
+            }
         } else {
-            gameState.currentTurn = _getNextActivePlayer(address(0));
+            // All players are all-in, no need to set currentTurn
+            gameState.currentTurn = address(0);
         }
 
         // Deal the cards for the new round
-        // TODO: Ziga - Review this part of the code
         uint8[] memory newCards;
         if (gameState.currentRound == IStateStorage.BettingRound.PreFlop) {
             newCards = handManager.dealFlop();
@@ -992,22 +1003,26 @@ contract GameLogic is IGameLogic {
         gameState.currentBet = 0;
         gameState.mainPot = 0;
         gameState.lastRaise = 0;
-        gameState.currentTurn = _getNextActivePlayer(address(0));
 
-        stateStorage.updateGameState(gameState);
-
+        // First reset all player states
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddress = stateStorage.getPlayerAtPosition(i);
             if (playerAddress != address(0)) {
                 IStateStorage.Player memory player = stateStorage.getPlayer(
                     playerAddress
                 );
-                if (player.currentBet > 0) {
-                    player.currentBet = 0;
-                    player.totalContribution = 0;
-                    stateStorage.updatePlayerState(playerAddress, player);
+                // Reset player to Active if they have chips
+                if (player.stack > 0) {
+                    player.status = IStateStorage.PlayerStatus.Active;
                 }
+                player.currentBet = 0;
+                player.totalContribution = 0;
+                stateStorage.updatePlayerState(playerAddress, player);
             }
         }
+
+        // Now we can safely find the next active player
+        gameState.currentTurn = _getNextActivePlayer(address(0));
+        stateStorage.updateGameState(gameState);
     }
 }

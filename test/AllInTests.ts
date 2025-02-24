@@ -509,7 +509,7 @@ describe("GameLogic - Double All-In Test", function () {
                 console.log(`Player ${i} successfully checked`);
             }
         } catch (error) {
-            console.log(`Error when player ${i} tried to check: ${error.message}`);
+            //console.log(`Error when player ${i} tried to check: ${error.message}`);
         }
     }
 

@@ -159,13 +159,28 @@ contract GameLogic is IGameLogic {
 
         stateStorage.updatePlayerState(player, playerState);
 
-        uint8 activeCount = _getActivePlayerCount();
+        (uint8 activeCount, uint8 allInCount) = _getPlayerStatusCounts();
 
-        if (activeCount == 1) {
+        // Case 1: Only one player remains (everyone else folded)
+        if (activeCount == 1 && allInCount == 0) {
             _awardPotToLastPlayer();
-        } else {
-            _moveToNextPlayer();
+            return;
         }
+
+        // Case 2: No active players remain, but multiple all-in players
+        if (activeCount == 0 && allInCount >= 2) {
+            _handleShowdown();
+            return;
+        }
+
+        // Case 3: One active player remains with all-in players
+        if (activeCount == 1 && allInCount >= 1) {
+            _handleShowdown();
+            return;
+        }
+
+        // Case 4: Normal case - continue to next player
+        _moveToNextPlayer();
     }
 
     /**
@@ -385,11 +400,21 @@ contract GameLogic is IGameLogic {
      * @dev Moves the action to the next active player
      */
     function _moveToNextPlayer() private {
-        if (_getActivePlayerCount() == 1) {
-            _awardPotToLastPlayer();
+        (uint8 activeCount, uint8 allInCount) = _getPlayerStatusCounts();
+
+        // If no active players remain but we have all-in players, go to showdown
+        if (activeCount == 0 && allInCount >= 2) {
+            _handleShowdown();
             return;
         }
 
+        // If one active player remains with all-in players, go to showdown
+        if (activeCount == 1 && allInCount >= 1) {
+            _handleShowdown();
+            return;
+        }
+
+        // Otherwise proceed as normal
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
         bool roundComplete = _isRoundComplete();
 
@@ -841,6 +866,32 @@ contract GameLogic is IGameLogic {
     }
 
     /**
+     * @dev Gets count of players who are either Active or AllIn
+     * @return activeCount The number of players with Active status
+     * @return allInCount The number of players with AllIn status
+     */
+    function _getPlayerStatusCounts()
+        private
+        view
+        returns (uint8 activeCount, uint8 allInCount)
+    {
+        for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
+            address playerAddress = stateStorage.getPlayerAtPosition(i);
+            if (playerAddress != address(0)) {
+                IStateStorage.Player memory player = stateStorage.getPlayer(
+                    playerAddress
+                );
+                if (player.status == IStateStorage.PlayerStatus.Active) {
+                    activeCount++;
+                } else if (player.status == IStateStorage.PlayerStatus.AllIn) {
+                    allInCount++;
+                }
+            }
+        }
+        return (activeCount, allInCount);
+    }
+
+    /**
      * @dev Checks if the current betting round is complete
      * @return True if the round is complete, false otherwise
      */
@@ -889,14 +940,23 @@ contract GameLogic is IGameLogic {
      */
     function _shouldShowdown() private view returns (bool) {
         IStateStorage.GameState memory gameState = stateStorage.getGameState();
-        return gameState.currentRound == IStateStorage.BettingRound.River;
+        (uint8 activeCount, uint8 allInCount) = _getPlayerStatusCounts();
+
+        // Go to showdown if:
+        // 1. We've reached the river
+        // 2. Or there are no more active players (only all-in players remain)
+        // 3. Or there's only one active player and at least one all-in player
+        return
+            gameState.currentRound == IStateStorage.BettingRound.River ||
+            (activeCount == 0 && allInCount >= 2) ||
+            (activeCount == 1 && allInCount >= 1);
     }
 
     /**
      * @dev Called at showdown to distribute pots
      */
     function _handleShowdown() private {
-        // Reveal all active players' hands
+        // Reveal all hole cards for both active and all-in players
         for (uint8 i = 0; i < PokerConstants.MAX_PLAYERS; i++) {
             address playerAddr = stateStorage.getPlayerAtPosition(i);
             if (playerAddr != address(0)) {
